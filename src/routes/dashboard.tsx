@@ -1,6 +1,5 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   Flame,
   Paperclip,
@@ -32,31 +31,10 @@ type Item = {
 };
 
 function DashboardPage() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showTrial, setShowTrial] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [view, setView] = useState<"grid" | "list">("grid");
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) {
-        navigate({ to: "/signin" });
-        return;
-      }
-      const u = data.session.user;
-      const name = (u.user_metadata?.full_name || u.email?.split("@")[0] || "USER").toUpperCase();
-      setUser({ email: u.email ?? "", name });
-      setLoading(false);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session) navigate({ to: "/signin" });
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [navigate]);
 
   const onFiles = (files: FileList | null) => {
     if (!files || !files.length) return;
@@ -71,18 +49,7 @@ function DashboardPage() {
     setItems((prev) => [...newItems, ...prev]);
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    navigate({ to: "/" });
-  };
-
   const filtered = items.filter((i) => i.title.toLowerCase().includes(query.toLowerCase()));
-
-  if (loading) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-[#0a0a0a] text-white/70">Loading…</div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -101,11 +68,10 @@ function DashboardPage() {
             <span className="text-white/40">/ 30</span>
           </div>
           <button
-            onClick={signOut}
             className="grid h-9 w-9 place-items-center rounded-full bg-[#4a2a1f] text-sm font-semibold uppercase"
-            title={user?.email}
+            title="User"
           >
-            {user?.name?.[0] ?? "U"}
+            U
           </button>
         </div>
       </header>
@@ -114,7 +80,7 @@ function DashboardPage() {
         // Empty state
         <main className="mx-auto flex max-w-4xl flex-col items-center px-6 pt-20 text-center">
           <h1 className="text-5xl font-semibold tracking-tight md:text-6xl">
-            Let's learn, {user?.name}
+            Let's learn, USER
           </h1>
 
           <Dropzone onFiles={onFiles} />
