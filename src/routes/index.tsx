@@ -27,7 +27,7 @@ function Nav() {
           <span className="font-display text-xl">Ultra Learn</span>
         </a>
         <a href="#pricing" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block">pricing</a>
-        <a href="#get-started" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03]">
+        <a href="/signin" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03]">
           Get started
         </a>
       </nav>
@@ -64,7 +64,7 @@ function Hero() {
           <a href="#demo" className="rounded-full border border-border bg-card px-5 py-3 text-sm font-medium transition-colors hover:bg-muted">
             ▶ Watch demo
           </a>
-          <a href="#get-started" className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.03]">
+          <a href="/signin" className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.03]">
             Get started →
           </a>
         </div>
@@ -355,7 +355,7 @@ function CTA() {
         </h2>
         <img src={`${CDN}/104.jpg`} alt="" className="mt-10 w-full rounded-3xl paper" />
         <div className="mt-10 flex justify-center">
-          <a href="#" className="rounded-full bg-primary px-8 py-4 text-base font-semibold text-primary-foreground">Get started →</a>
+          <a href="/signin" className="rounded-full bg-primary px-8 py-4 text-base font-semibold text-primary-foreground">Get started →</a>
         </div>
       </div>
       <div className="mt-16 overflow-hidden border-y border-border bg-card py-5">
