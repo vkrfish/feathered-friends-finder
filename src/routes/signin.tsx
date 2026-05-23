@@ -1,8 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
-import { Eye, EyeOff, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({
@@ -16,49 +13,8 @@ export const Route = createFileRoute("/signin")({
 
 function SignInPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard" });
-    });
-  }, [navigate]);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const fn = mode === "signin" ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-      const { error } = await fn.call(supabase.auth, {
-        email,
-        password,
-        options: mode === "signup" ? { emailRedirectTo: window.location.origin + "/dashboard" } : undefined,
-      } as any);
-      if (error) throw error;
-      navigate({ to: "/dashboard" });
-    } catch (err: any) {
-      setError(err?.message ?? "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const google = async () => {
-    setError(null);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin + "/dashboard",
-    });
-    if (result.error) {
-      setError(result.error.message ?? "Google sign-in failed");
-      return;
-    }
-    if (result.redirected) return;
+  const handleSignIn = () => {
     navigate({ to: "/dashboard" });
   };
 
@@ -86,12 +42,12 @@ function SignInPage() {
               <ChevronLeft className="h-4 w-4" /> Back to home
             </Link>
             <h1 className="text-3xl font-semibold text-foreground">
-              {mode === "signin" ? "Sign in to UltraLearn" : "Create your account"}
+              Sign in to UltraLearn
             </h1>
             <p className="mt-2 italic text-muted-foreground">Your UltraLearn workspace starts here</p>
 
             <button
-              onClick={google}
+              onClick={handleSignIn}
               className="mt-8 flex w-full items-center justify-center gap-3 rounded-full bg-muted px-6 py-3 text-sm font-medium hover:bg-muted/70"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -107,14 +63,17 @@ function SignInPage() {
               <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
             </div>
 
-            <form onSubmit={submit} className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSignIn();
+              }}
+              className="space-y-4"
+            >
               <div>
                 <label className="text-sm font-semibold">Email</label>
                 <input
                   type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. andrewmaske@example.com"
                   className="mt-1 w-full rounded-lg bg-muted px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary"
                 />
@@ -123,33 +82,19 @@ function SignInPage() {
                 <label className="text-sm font-semibold">Password</label>
                 <div className="relative mt-1">
                   <input
-                    type={showPw ? "text" : "password"}
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
                     placeholder="••••••••"
                     className="w-full rounded-lg bg-muted px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-primary"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    className="absolute inset-y-0 right-3 flex items-center text-muted-foreground"
-                  >
-                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
                 </div>
               </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
-
               <button
                 type="submit"
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-foreground px-6 py-3 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-foreground px-6 py-3 text-sm font-semibold text-background hover:opacity-90"
               >
                 <span className="inline-block h-4 w-4 rounded-sm bg-primary" />
-                {loading ? "Please wait…" : mode === "signin" ? "Sign In" : "Create account"}
+                Sign In
               </button>
             </form>
 
@@ -159,12 +104,9 @@ function SignInPage() {
             </p>
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
-              {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-              <button
-                onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-                className="font-semibold text-primary hover:underline"
-              >
-                {mode === "signin" ? "Sign Up" : "Sign In"}
+              Don't have an account?{" "}
+              <button className="font-semibold text-primary hover:underline">
+                Sign Up
               </button>
             </p>
           </div>
