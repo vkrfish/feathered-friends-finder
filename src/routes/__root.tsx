@@ -74,7 +74,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "LearnX — The AI study assistant that turns chaos into preparation" },
       { name: "description", content: "Upload your files. Let AI handle the teaching & preparation. LearnX turns 800-page PDFs, YouTube lectures and messy notes into flashcards, quizzes and mind maps in seconds." },
-      { name: "author", content: "Novify" },
       { property: "og:title", content: "LearnX — Study smarter, not harder" },
       { property: "og:description", content: "The AI study assistant that turns chaos into preparation." },
       { property: "og:type", content: "website" },

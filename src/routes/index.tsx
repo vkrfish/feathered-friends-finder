@@ -23,7 +23,6 @@ function Nav() {
     <header className="sticky top-4 z-50 mx-auto w-[min(960px,92vw)]">
       <nav className="flex items-center justify-between rounded-full border border-border bg-card/80 px-3 py-2 backdrop-blur-xl shadow-[0_8px_30px_-12px_oklch(0_0_0/0.2)]">
         <a href="#" className="flex items-center gap-2 pl-2">
-          <img src={LOGO} alt="" className="h-6 w-6" />
           <span className="font-display text-xl">LearnX</span>
         </a>
         <a href="#pricing" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block">pricing</a>
@@ -47,12 +46,8 @@ function Hero() {
 
       <div className="relative mx-auto max-w-3xl pt-24 text-center">
         <p className="font-hand text-3xl text-muted-foreground">Grab Your coffee and get started for <span className="marker-yellow font-semibold text-foreground">FREE!!</span></p>
-        <div className="mx-auto mt-10 flex items-center justify-center gap-4">
-          <img src={LOGO} alt="" className="h-16 w-16" />
-          <div className="text-left">
-            <h1 className="font-display text-7xl leading-none tracking-tight md:text-8xl">LearnX</h1>
-            <p className="font-hand text-2xl text-muted-foreground">By Novify</p>
-          </div>
+        <div className="mx-auto mt-10 text-center">
+          <h1 className="font-display text-7xl leading-none tracking-tight md:text-8xl">LearnX</h1>
         </div>
         <p className="mx-auto mt-10 max-w-2xl font-display text-3xl leading-tight md:text-4xl">
           The AI study assistant that turns <span className="marker-yellow">chaos</span> into <span className="marker-mint">preparation</span>.
@@ -421,11 +416,9 @@ function Footer() {
     <footer className="border-t border-border bg-card/60 px-6 py-12">
       <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 md:flex-row">
         <div className="flex items-center gap-2">
-          <img src={LOGO} alt="" className="h-6 w-6" />
           <span className="font-display text-xl">LearnX</span>
-          <span className="font-hand text-lg text-muted-foreground">by Novify</span>
         </div>
-        <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Novify. Made with too much coffee ☕</p>
+        <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} LearnX. Made with too much coffee ☕</p>
       </div>
     </footer>
   );
