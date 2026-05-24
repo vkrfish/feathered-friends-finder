@@ -3,6 +3,7 @@ services:
     name: backend-fastapi
     env: python
     region: ohio
+    plan: free
     rootDir: backend-fastapi
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -16,6 +17,7 @@ services:
     name: backend-node-gateway
     env: node
     region: ohio
+    plan: free
     rootDir: backend-node
     buildCommand: npm install
     startCommand: npm start
