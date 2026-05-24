@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: backend-fastapi
+    env: python
+    region: ohio
+    rootDir: backend-fastapi
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+
+  - type: web
+    name: backend-node-gateway
+    env: node
+    region: ohio
+    rootDir: backend-node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: FASTAPI_URL
+        fromService:
+          type: web
+          name: backend-fastapi
+          envVarKey: RENDER_EXTERNAL_URL
