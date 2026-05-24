@@ -57,7 +57,7 @@ import {
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
-    meta: [{ title: "Dashboard — UltraLearn" }],
+    meta: [{ title: "Dashboard — LearnX" }],
   }),
   component: DashboardPage,
 });
@@ -711,7 +711,7 @@ export default function DashboardPage() {
           {/* Brand watermark */}
           <div className="absolute bottom-8 flex items-center gap-2 opacity-30">
             <div className="h-5 w-5 rotate-45 bg-white/80" style={{ clipPath: 'polygon(50% 0,100% 50%,50% 100%,0 50%)' }} />
-            <span className="text-xs font-medium tracking-widest uppercase text-white">Ultra Learn</span>
+            <span className="text-xs font-medium tracking-widest uppercase text-white">LearnX</span>
           </div>
         </div>
 
@@ -742,7 +742,7 @@ export default function DashboardPage() {
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-tr from-white/10 to-white/5 border border-white/10 shadow-inner">
                 <div className="h-4 w-4 rotate-45 bg-white/90" style={{ clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)" }} />
               </div>
-              <span className="font-display text-2xl tracking-wide font-medium bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Ultra Learn</span>
+              <span className="font-display text-2xl tracking-wide font-medium bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">LearnX</span>
             </Link>
             
             <div className="flex flex-wrap items-center gap-4">

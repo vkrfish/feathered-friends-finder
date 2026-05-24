@@ -24,7 +24,7 @@ function Nav() {
       <nav className="flex items-center justify-between rounded-full border border-border bg-card/80 px-3 py-2 backdrop-blur-xl shadow-[0_8px_30px_-12px_oklch(0_0_0/0.2)]">
         <a href="#" className="flex items-center gap-2 pl-2">
           <img src={LOGO} alt="" className="h-6 w-6" />
-          <span className="font-display text-xl">Ultra Learn</span>
+          <span className="font-display text-xl">LearnX</span>
         </a>
         <a href="#pricing" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block">pricing</a>
         <a href="/signin" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03]">
@@ -50,7 +50,7 @@ function Hero() {
         <div className="mx-auto mt-10 flex items-center justify-center gap-4">
           <img src={LOGO} alt="" className="h-16 w-16" />
           <div className="text-left">
-            <h1 className="font-display text-7xl leading-none tracking-tight md:text-8xl">UltraLearn</h1>
+            <h1 className="font-display text-7xl leading-none tracking-tight md:text-8xl">LearnX</h1>
             <p className="font-hand text-2xl text-muted-foreground">By Novify</p>
           </div>
         </div>
@@ -225,10 +225,10 @@ function NewNormal() {
 function PowerTools() {
   const tools = [
     { img: "106.jpg", h: "Deep Research.", t: "Stop falling down Google rabbit holes at 2 A.M. When your syllabus isn't enough, the AI scours the entire web to pull the exact, verified facts you need." },
-    { img: "91.jpg", h: "Feed the machine.", t: "Drop your heaviest, 800-page PDF textbooks straight into the engine. Ultra Learn instantly digests the academic fluff and hands you back a clean, actionable study guide." },
-    { img: "89.jpg", h: "Skip the lecture.", t: "Paste any YouTube URL and walk away. Ultra Learn watches the grueling two-hour video for you and distills it into a sharp, five-minute read." },
+    { img: "91.jpg", h: "Feed the machine.", t: "Drop your heaviest, 800-page PDF textbooks straight into the engine. LearnX instantly digests the academic fluff and hands you back a clean, actionable study guide." },
+    { img: "89.jpg", h: "Skip the lecture.", t: "Paste any YouTube URL and walk away. LearnX watches the grueling two-hour video for you and distills it into a sharp, five-minute read." },
     { img: "88.jpg", h: "Save the group chat.", t: "Don't gatekeep the A+. With exactly one click, beam your AI-generated master study guides directly to your friends." },
-    { img: "97.jpg", h: "Your server, smarter.", t: "Add the Ultra Learn bot to your Discord server. Ask it questions mid-conversation and generate study materials for the entire squad." },
+    { img: "97.jpg", h: "Your server, smarter.", t: "Add the LearnX bot to your Discord server. Ask it questions mid-conversation and generate study materials for the entire squad." },
   ];
   return (
     <section className="mx-auto max-w-[1200px] px-6 py-24">
@@ -384,10 +384,10 @@ function Founder() {
 }
 
 const faqs = [
-  { q: "Why is Ultra Learn better than ChatGPT or Perplexity?", a: "ChatGPT is a Chatbot. Ultra Learn is a Teacher. ChatGPT gives you answers, which feels good but creates 'Knowledge Illusions.' Ultra Learn forces you to retrieve information via Spaced Repetition and Quizzes. We also ground every answer in your specific PDFs, so you never get hallucinated facts about biology when you're studying history." },
-  { q: "How does it beat NotebookLM?", a: "NotebookLM is amazing for 'talking to docs'. But it stops there. Ultra Learn takes the next step: Active Recall. We don't just summarize; we build a full study system (Flashcards, Quizzes, and Mind Maps) to ensure you actually memorize the content for the exam, not just read it." },
-  { q: "Why is it better than YouLearn & MindGrasp?", a: "We focus on mastery, not just consumption. Other apps let you watch videos or read notes. Ultra Learn works backward from the exam: 'What do I need to know?' It breaks concepts down, tests you relentlessly, and adapts to your weak spots." },
-  { q: "How does Ultra Learn AI work?", a: "Simply upload your study materials (PDFs, slides, or paste text), and our AI will instantly generate summaries, flashcards, and quizzes. You can also chat with your documents to get answers to specific questions." },
+  { q: "Why is LearnX better than ChatGPT or Perplexity?", a: "ChatGPT is a Chatbot. LearnX is a Teacher. ChatGPT gives you answers, which feels good but creates 'Knowledge Illusions.' LearnX forces you to retrieve information via Spaced Repetition and Quizzes. We also ground every answer in your specific PDFs, so you never get hallucinated facts about biology when you're studying history." },
+  { q: "How does it beat NotebookLM?", a: "NotebookLM is amazing for 'talking to docs'. But it stops there. LearnX takes the next step: Active Recall. We don't just summarize; we build a full study system (Flashcards, Quizzes, and Mind Maps) to ensure you actually memorize the content for the exam, not just read it." },
+  { q: "Why is it better than YouLearn & MindGrasp?", a: "We focus on mastery, not just consumption. Other apps let you watch videos or read notes. LearnX works backward from the exam: 'What do I need to know?' It breaks concepts down, tests you relentlessly, and adapts to your weak spots." },
+  { q: "How does LearnX AI work?", a: "Simply upload your study materials (PDFs, slides, or paste text), and our AI will instantly generate summaries, flashcards, and quizzes. You can also chat with your documents to get answers to specific questions." },
   { q: "Is my data secure?", a: "Yes. Your uploads are encrypted in transit and at rest. We never train public models on your private files." },
 ];
 
@@ -422,7 +422,7 @@ function Footer() {
       <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 md:flex-row">
         <div className="flex items-center gap-2">
           <img src={LOGO} alt="" className="h-6 w-6" />
-          <span className="font-display text-xl">Ultra Learn</span>
+          <span className="font-display text-xl">LearnX</span>
           <span className="font-hand text-lg text-muted-foreground">by Novify</span>
         </div>
         <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Novify. Made with too much coffee ☕</p>

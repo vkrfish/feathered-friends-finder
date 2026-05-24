@@ -12,6 +12,8 @@ import psycopg2
 from psycopg2.extras import execute_values
 import pypdf
 import requests
+import zipfile
+import io
 from dotenv import load_dotenv
 
 # google.generativeai is only imported if OpenRouter is NOT configured
@@ -258,6 +260,21 @@ def generate_study_materials(content_text: str, title: str):
     }
 
 # -------------------------------------------------------------
+# HELPER: Extract text from DOCX (Word Documents)
+# -------------------------------------------------------------
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as docx:
+            xml_content = docx.read('word/document.xml')
+            matches = re.findall(r'<w:t[^>]*>(.*?)</w:t>', xml_content.decode('utf-8'))
+            text = "".join(matches)
+            text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+            return text
+    except Exception as e:
+        print(f"[ERROR] DOCX extraction failed: {e}")
+        return ""
+
+# -------------------------------------------------------------
 # API ENDPOINT: PROCESS PDF & STORE RAG CHUNKS
 # -------------------------------------------------------------
 @app.post("/process-pdf")
@@ -267,28 +284,64 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
         raise HTTPException(status_code=500, detail="Database connection failed")
     
     try:
-        # Read PDF content
-        pdf_reader = pypdf.PdfReader(file.file)
+        # Read the uploaded file into memory
+        file_bytes = await file.read()
+        filename_lower = file.filename.lower()
         full_text = ""
         page_chunks = []
 
-        for idx, page in enumerate(pdf_reader.pages):
-            page_text = page.extract_text() or ""
-            full_text += page_text + "\n"
-            
-            # Chunk page text
-            chunks = chunk_text(page_text)
-            for chunk in chunks:
-                if chunk.strip():
-                    page_chunks.append((item_id, idx + 1, chunk))
+        # 1. Parse content based on file type
+        try:
+            if filename_lower.endswith(".docx"):
+                print(f"[INFO] Ingesting Word Document (.docx): {file.filename}")
+                full_text = extract_text_from_docx(file_bytes)
+                if full_text.strip():
+                    # Chunk extracted docx text
+                    chunks = chunk_text(full_text)
+                    for chunk in chunks:
+                        if chunk.strip():
+                            page_chunks.append((item_id, 1, chunk)) # Docx has no native page layout, use page 1
 
+            elif filename_lower.endswith(".txt") or filename_lower.endswith(".md"):
+                print(f"[INFO] Ingesting Plain Text File (.txt/.md): {file.filename}")
+                full_text = file_bytes.decode("utf-8", errors="ignore")
+                if full_text.strip():
+                    chunks = chunk_text(full_text)
+                    for chunk in chunks:
+                        if chunk.strip():
+                            page_chunks.append((item_id, 1, chunk))
+
+            else:
+                # Default behavior: treat as PDF
+                print(f"[INFO] Ingesting PDF Document: {file.filename}")
+                pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+                for idx, page in enumerate(pdf_reader.pages):
+                    page_text = page.extract_text() or ""
+                    full_text += page_text + "\n"
+                    
+                    # Chunk page text
+                    chunks = chunk_text(page_text)
+                    for chunk in chunks:
+                        if chunk.strip():
+                            page_chunks.append((item_id, idx + 1, chunk))
+
+        except Exception as parse_error:
+            print(f"[WARNING] Native parsing failed for {file.filename}: {parse_error}. Falling back to default layout text.")
+            full_text = ""
+
+        # 2. If no text could be extracted, use a dynamic fallback
         if not full_text.strip():
             print(f"[WARNING] Could not extract text from {file.filename}. Using dynamic fallback.")
-            clean_title = file.filename.replace(".pdf", "").replace("_", " ").replace("-", " ")
-            full_text = f"This study guide covers topics related to {clean_title}. The document '{file.filename}' is a visual resource or scanned layout. Please use the original PDF viewer on the left to read, and practice active recall retrieving terms like {clean_title}."
+            clean_title = file.filename.split('.')[0].replace("_", " ").replace("-", " ")
+            full_text = (
+                f"This study workspace covers topics related to {clean_title}.\n\n"
+                f"The document '{file.filename}' is a layout file, office document, or scanned asset. "
+                f"Please open or download the original file to read, and use this study center to generate quizzes, "
+                f"study guides, and practice active recall concepts about {clean_title}."
+            )
             page_chunks.append((item_id, 1, full_text))
 
-        # Generate vectors and prepare bulk data
+        # 3. Generate vectors and prepare bulk data
         data_list = []
         for item_id_val, page_num, chunk in page_chunks:
             embedding = get_embedding(chunk, fast=True)

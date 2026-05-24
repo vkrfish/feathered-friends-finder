@@ -72,10 +72,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "UltraLearn — The AI study assistant that turns chaos into preparation" },
-      { name: "description", content: "Upload your files. Let AI handle the teaching & preparation. UltraLearn turns 800-page PDFs, YouTube lectures and messy notes into flashcards, quizzes and mind maps in seconds." },
+      { title: "LearnX — The AI study assistant that turns chaos into preparation" },
+      { name: "description", content: "Upload your files. Let AI handle the teaching & preparation. LearnX turns 800-page PDFs, YouTube lectures and messy notes into flashcards, quizzes and mind maps in seconds." },
       { name: "author", content: "Novify" },
-      { property: "og:title", content: "UltraLearn — Study smarter, not harder" },
+      { property: "og:title", content: "LearnX — Study smarter, not harder" },
       { property: "og:description", content: "The AI study assistant that turns chaos into preparation." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

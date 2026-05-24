@@ -4,8 +4,8 @@ import { ChevronLeft } from "lucide-react";
 export const Route = createFileRoute("/signin")({
   head: () => ({
     meta: [
-      { title: "Sign in — UltraLearn" },
-      { name: "description", content: "Sign in to your UltraLearn workspace." },
+      { title: "Sign in — LearnX" },
+      { name: "description", content: "Sign in to your LearnX workspace." },
     ],
   }),
   component: SignInPage,
@@ -42,9 +42,9 @@ function SignInPage() {
               <ChevronLeft className="h-4 w-4" /> Back to home
             </Link>
             <h1 className="text-3xl font-semibold text-foreground">
-              Sign in to UltraLearn
+              Sign in to LearnX
             </h1>
-            <p className="mt-2 italic text-muted-foreground">Your UltraLearn workspace starts here</p>
+            <p className="mt-2 italic text-muted-foreground">Your LearnX workspace starts here</p>
 
             <button
               onClick={handleSignIn}
