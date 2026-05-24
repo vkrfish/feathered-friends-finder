@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist/client",
+  "buildCommand": "npx vite build --config vite.vercel.config.ts",
+  "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
