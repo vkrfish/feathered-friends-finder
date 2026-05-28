@@ -1,5 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "../integrations/supabase/client";
+
+// Authenticated fetch helper
+async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = new Headers(options.headers || {});
+  if (session?.access_token) {
+    headers.set("Authorization", `Bearer ${session.access_token}`);
+  }
+  return fetch(url, { ...options, headers });
+}
 import {
   Flame,
   Paperclip,
@@ -63,6 +74,13 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const [session, setSession] = useState<any>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
+  const [profileName, setProfileName] = useState("User");
+  const [profileInitial, setProfileInitial] = useState("U");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
   const [showTrial, setShowTrial] = useState(true);
   const [view, setView] = useState<"grid" | "list">("grid");
   const [query, setQuery] = useState("");
@@ -78,6 +96,60 @@ export default function DashboardPage() {
     "none" | "files" | "youtube" | "websites" | "text" | "research"
   >("none");
   const [inputText, setInputText] = useState("");
+
+  // Check user session and fetch profile
+  useEffect(() => {
+    const checkUserSession = async () => {
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (!activeSession) {
+        toast.error("Please sign in to access your workspace.");
+        navigate({ to: "/signin" });
+        return;
+      }
+      setSession(activeSession);
+      setLoadingSession(false);
+
+      const user = activeSession.user;
+      const email = user.email || "";
+      const metaName = user.user_metadata?.full_name || user.user_metadata?.name || email.split("@")[0];
+      setProfileName(metaName);
+      setProfileInitial(metaName.charAt(0).toUpperCase());
+
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        if (profile && !error) {
+          const name = profile.display_name || metaName;
+          setProfileName(name);
+          setProfileInitial(name.charAt(0).toUpperCase());
+        }
+      } catch (err) {
+        console.error("Error fetching profile details:", err);
+      }
+    };
+
+    checkUserSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
+      setSession(activeSession);
+      if (!activeSession) {
+        navigate({ to: "/signin" });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast.success("Signed out successfully.");
+    navigate({ to: "/signin" });
+  };
 
   // Loading animation state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -99,7 +171,7 @@ export default function DashboardPage() {
   const fetchItems = async (isChangeMode = false) => {
     if (useRealBackend) {
       try {
-        const res = await fetch("http://localhost:3001/api/items");
+        const res = await fetchWithAuth("http://localhost:3001/api/items");
         if (!res.ok) throw new Error("Failed to fetch");
         const data = await res.json();
         setItems(data);
@@ -184,7 +256,7 @@ export default function DashboardPage() {
       setIsLoadingItem(true);
       if (useRealBackend) {
         try {
-          const res = await fetch(`http://localhost:3001/api/items/${activeItemId}`);
+          const res = await fetchWithAuth(`http://localhost:3001/api/items/${activeItemId}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           setSelectedDetailedItem(data);
@@ -280,7 +352,7 @@ export default function DashboardPage() {
 
     // ⚡ Speed Optimization: Start upload immediately while animation runs concurrently!
     const uploadPromise = useRealBackend
-      ? fetch("http://localhost:3001/api/items/file", {
+      ? fetchWithAuth("http://localhost:3001/api/items/file", {
           method: "POST",
           body: formData,
         })
@@ -360,7 +432,7 @@ export default function DashboardPage() {
       if (useRealBackend) {
         try {
           setAnalysisLogs((prev) => [...prev, "📡 Fetching transcript & running RAG pipeline..."]);
-          const res = await fetch("http://localhost:3001/api/items/youtube", {
+          const res = await fetchWithAuth("http://localhost:3001/api/items/youtube", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url }),
@@ -428,7 +500,7 @@ export default function DashboardPage() {
       if (useRealBackend) {
         try {
           setAnalysisLogs((prev) => [...prev, "📡 Extracting DOM content & clean reading view..."]);
-          const res = await fetch("http://localhost:3001/api/items/website", {
+          const res = await fetchWithAuth("http://localhost:3001/api/items/website", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url }),
@@ -491,7 +563,7 @@ export default function DashboardPage() {
       if (useRealBackend) {
         try {
           setAnalysisLogs((prev) => [...prev, "📡 Compiling notes & creating semantic vector..."]);
-          const res = await fetch("http://localhost:3001/api/items/text", {
+          const res = await fetchWithAuth("http://localhost:3001/api/items/text", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: inputText }),
@@ -557,7 +629,7 @@ export default function DashboardPage() {
       if (useRealBackend) {
         try {
           setAnalysisLogs((prev) => [...prev, "📡 Launching web crawler agents & compiling dossiers..."]);
-          const res = await fetch("http://localhost:3001/api/items/research", {
+          const res = await fetchWithAuth("http://localhost:3001/api/items/research", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ topic }),
@@ -610,7 +682,7 @@ export default function DashboardPage() {
 
     if (useRealBackend) {
       try {
-        const res = await fetch(`http://localhost:3001/api/items/${id}`, { method: "DELETE" });
+        const res = await fetchWithAuth(`http://localhost:3001/api/items/${id}`, { method: "DELETE" });
         if (!res.ok) throw new Error();
         fetchItems();
         toast.success("Deleted from PostgreSQL Database");
@@ -654,7 +726,7 @@ export default function DashboardPage() {
       <style dangerouslySetInnerHTML={{ __html: cardFlipStyle }} />
       
       {/* BEAUTIFUL LOADING SCREEN — shows while analyzing OR loading details */}
-      {isAnalyzing || (isLoadingItem && !selectedDetailedItem) ? (
+      {isAnalyzing || loadingSession || (isLoadingItem && !selectedDetailedItem) ? (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#060606]" style={{ fontFamily: "'Inter', sans-serif" }}>
           {/* Ambient glow backdrop */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -675,9 +747,11 @@ export default function DashboardPage() {
           </div>
 
           {/* Title */}
-          <h2 className="text-2xl font-semibold tracking-tight text-white mb-1">Building Your Study Workspace</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-white mb-1">
+            {loadingSession ? "Authenticating Session" : "Building Your Study Workspace"}
+          </h2>
           <p className="text-sm text-white/40 mb-8">
-            {analysisLogs.length > 0 ? analysisLogs[analysisLogs.length - 1] : 'Initializing AI pipeline...'}
+            {loadingSession ? "Verifying active Supabase connection..." : (analysisLogs.length > 0 ? analysisLogs[analysisLogs.length - 1] : 'Initializing AI pipeline...')}
           </p>
 
           {/* Progress bar */}
@@ -754,9 +828,28 @@ export default function DashboardPage() {
                 <span className="font-semibold text-orange-200">2 day</span>
                 <span className="text-orange-500/50">/ 30</span>
               </div>
-              {/* User profile */}
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4a2a1f] border border-orange-800/40 text-sm font-semibold uppercase text-orange-200 shadow-md">
-                T
+              {/* User profile dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4a2a1f] border border-orange-800/40 text-sm font-semibold uppercase text-orange-200 shadow-md focus:outline-none hover:ring-2 hover:ring-orange-500/50 transition-all"
+                >
+                  {profileInitial}
+                </button>
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-xl border border-white/15 bg-[#121212]/95 backdrop-blur-xl p-1 shadow-2xl z-50 text-left">
+                    <div className="px-3 py-2 border-b border-white/5 text-xs text-white/40 truncate">
+                      {session?.user?.email}
+                    </div>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-white/5 transition-all text-left font-medium"
+                    >
+                      <X className="h-4 w-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </header>
@@ -768,7 +861,7 @@ export default function DashboardPage() {
             {/* Title heading */}
             <div className="mb-4 text-center mt-6">
               <h1 className="text-5xl font-semibold tracking-tight md:text-6xl text-white">
-                Let's learn, TANGUTURI
+                Let's learn, {profileName}
               </h1>
             </div>
 
@@ -1250,7 +1343,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
     onUpdateItem({ ...item, notes: notesText });
     if (useRealBackend) {
       try {
-        await fetch(`http://localhost:3001/api/items/${item.id}/notes`, {
+        await fetchWithAuth(`http://localhost:3001/api/items/${item.id}/notes`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ notes: notesText }),
@@ -1357,7 +1450,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
       const h1Name = edgeVoices.find(v => v.id === voice1Name)?.name?.split(" ")[0] || "Host 1";
       const h2Name = edgeVoices.find(v => v.id === voice2Name)?.name?.split(" ")[0] || "Host 2";
 
-      const res = await fetch(`http://localhost:3001/api/items/${item.id}/podcast`, { 
+      const res = await fetchWithAuth(`http://localhost:3001/api/items/${item.id}/podcast`, { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -1388,7 +1481,18 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
       return;
     }
 
-    playNext();
+    const h1Name = edgeVoices.find(v => v.id === voice1Name)?.name?.split(" ")[0] || "Host 1";
+    const h2Name = edgeVoices.find(v => v.id === voice2Name)?.name?.split(" ")[0] || "Host 2";
+    const audioUrl = `http://localhost:8000/tts-full/${item.id}?voice1=${voice1Name}&voice2=${voice2Name}&h1Name=${encodeURIComponent(h1Name)}&h2Name=${encodeURIComponent(h2Name)}`;
+    
+    const audio = new Audio(audioUrl);
+    currentAudioRef.current = audio;
+    setPlayingAudioIdx(0);
+    audio.play();
+    audio.onended = () => {
+      setPlayingAudioIdx(-1);
+      currentAudioRef.current = null;
+    };
   };
 
   const stopPodcast = () => {
@@ -1417,7 +1521,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
     setIsGeneratingBriefing(true);
     toast.info("Generating Briefing Doc...");
     try {
-      const res = await fetch(`http://localhost:3001/api/items/${item.id}/briefing`, { method: "POST" });
+      const res = await fetchWithAuth(`http://localhost:3001/api/items/${item.id}/briefing`, { method: "POST" });
       const data = await res.json();
       onUpdateItem({ ...item, briefingDoc: data.briefing_doc });
       toast.success("Briefing Doc generated!");
@@ -1430,7 +1534,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
   const pinMessage = async (content: string) => {
     if (!useRealBackend) return toast.error("Requires Postgres backend.");
     try {
-      const res = await fetch(`http://localhost:3001/api/items/${item.id}/pins`, {
+      const res = await fetchWithAuth(`http://localhost:3001/api/items/${item.id}/pins`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -1447,7 +1551,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
   const deletePin = async (pinId: string) => {
     if (!useRealBackend) return;
     try {
-      await fetch(`http://localhost:3001/api/items/${item.id}/pins/${pinId}`, { method: "DELETE" });
+      await fetchWithAuth(`http://localhost:3001/api/items/${item.id}/pins/${pinId}`, { method: "DELETE" });
       const currentPins = item.pinnedNotes || [];
       onUpdateItem({ ...item, pinnedNotes: currentPins.filter(p => p.id !== pinId) });
       toast.success("Pin removed.");
@@ -1474,7 +1578,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
 
     if (useRealBackend) {
       try {
-        const res = await fetch(`http://localhost:3001/api/items/${item.id}/chat`, {
+        const res = await fetchWithAuth(`http://localhost:3001/api/items/${item.id}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question: query }),
@@ -1666,7 +1770,7 @@ function StudySessionPanel({ item, useRealBackend, pdfBlobUrl, onBack, onUpdateI
               // Priority: 1) In-memory blob URL (just uploaded), 2) localFileUrl (simulated mode),
               // 3) URL-encoded static server path (previously uploaded & saved to disk)
               const staticServerUrl = item.fileName
-                ? `http://localhost:3001/uploads/${encodeURIComponent(item.id + "_" + item.fileName)}`
+                ? `http://localhost:3001/api/items/${item.id}/file`
                 : null;
               const basePdfSrc = pdfBlobUrl || item.localFileUrl || staticServerUrl;
               const pdfSrc = basePdfSrc ? (pdfPageNum ? `${basePdfSrc}#page=${pdfPageNum}` : basePdfSrc) : null;

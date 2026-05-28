@@ -6,17 +6,28 @@ import axios from "axios";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config({ path: "../.env" });
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8000";
 
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+// Setup Supabase client for backend JWT authentication
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("[WARNING] Missing Supabase environment keys. Authenticated requests might fail.");
+}
+
+const supabase = createClient(supabaseUrl || "", supabaseKey || "");
 
 // Setup Multer for memory storage file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -42,6 +53,51 @@ pool.connect((err, client, release) => {
 // UUID Validator for safe PostgreSQL queries
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (id) => uuidRegex.test(id);
+
+// Middleware to validate Supabase JWT token
+const authenticateUser = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid authorization token" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: "Unauthorized: " + (error?.message || "User not found") });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Unauthorized: " + err.message });
+  }
+};
+
+// Middleware to verify item ownership
+const verifyItemOwnership = async (req, res, next) => {
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    if (id === "default-pdf" || id === "default-youtube") {
+      return next(); // Demo mock assets can be accessed by everyone
+    }
+    return res.status(404).json({ error: "Item not found" });
+  }
+
+  try {
+    const r = await pool.query("SELECT profile_id FROM public.study_items WHERE id = $1", [id]);
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+    const profileId = r.rows[0].profile_id;
+    if (profileId && profileId !== req.user.id) {
+      return res.status(403).json({ error: "Access denied: this item belongs to another user" });
+    }
+    next();
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+};
 
 // Pre-loaded Tutorial Study items served in Postgres Mode
 const MOCK_YOUTUBE_INTERNSHIP = {
@@ -223,12 +279,13 @@ const formatItem = (dbItem) => {
   };
 };
 
-// -------------------------------------------------------------
-// 1. GET ALL ITEMS
-// -------------------------------------------------------------
-app.get("/api/items", async (req, res) => {
+// 1. GET ALL ITEMS (FILTERED BY PROFILE)
+app.get("/api/items", authenticateUser, async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM public.study_items ORDER BY created_at DESC");
+    const result = await pool.query(
+      "SELECT * FROM public.study_items WHERE profile_id = $1 ORDER BY created_at DESC",
+      [req.user.id]
+    );
     const items = result.rows.map(formatItem);
     res.json(items);
   } catch (e) {
@@ -237,10 +294,8 @@ app.get("/api/items", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 2. GET ITEM DETAILS (WITH FLASHCARDS, QUIZZES, AND CHAT)
-// -------------------------------------------------------------
-app.get("/api/items/:id", async (req, res) => {
+app.get("/api/items/:id", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   
   if (id === "default-pdf") {
@@ -250,12 +305,11 @@ app.get("/api/items/:id", async (req, res) => {
     return res.json(MOCK_YOUTUBE_INTERNSHIP);
   }
   
-  if (!isUuid(id)) {
-    return res.status(404).json({ error: "Item not found" });
-  }
-
   try {
-    const itemRes = await pool.query("SELECT * FROM public.study_items WHERE id = $1", [id]);
+    const itemRes = await pool.query(
+      "SELECT * FROM public.study_items WHERE id = $1 AND profile_id = $2",
+      [id, req.user.id]
+    );
     if (itemRes.rows.length === 0) {
       return res.status(404).json({ error: "Item not found" });
     }
@@ -281,21 +335,16 @@ app.get("/api/items/:id", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 3. DELETE ITEM
-// -------------------------------------------------------------
-app.delete("/api/items/:id", async (req, res) => {
+app.delete("/api/items/:id", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   
   if (id === "default-pdf" || id === "default-youtube") {
     return res.json({ success: true });
   }
-  if (!isUuid(id)) {
-    return res.status(404).json({ error: "Item not found" });
-  }
 
   try {
-    await pool.query("DELETE FROM public.study_items WHERE id = $1", [id]);
+    await pool.query("DELETE FROM public.study_items WHERE id = $1 AND profile_id = $2", [id, req.user.id]);
     res.json({ success: true });
   } catch (e) {
     console.error(e);
@@ -303,22 +352,20 @@ app.delete("/api/items/:id", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 4. UPDATE STUDY NOTES
-// -------------------------------------------------------------
-app.put("/api/items/:id/notes", async (req, res) => {
+app.put("/api/items/:id/notes", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   const { notes } = req.body;
   
   if (id === "default-pdf" || id === "default-youtube") {
     return res.json({ success: true });
   }
-  if (!isUuid(id)) {
-    return res.status(404).json({ error: "Item not found" });
-  }
 
   try {
-    await pool.query("UPDATE public.study_items SET notes = $1 WHERE id = $2", [notes, id]);
+    await pool.query(
+      "UPDATE public.study_items SET notes = $1 WHERE id = $2 AND profile_id = $3",
+      [notes, id, req.user.id]
+    );
     res.json({ success: true });
   } catch (e) {
     console.error(e);
@@ -326,10 +373,8 @@ app.put("/api/items/:id/notes", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 5. UPLOAD & INDEX PDF (FORWARD TO FASTAPI FOR RAG)
-// -------------------------------------------------------------
-app.post("/api/items/file", upload.single("file"), async (req, res) => {
+app.post("/api/items/file", authenticateUser, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
@@ -339,20 +384,12 @@ app.post("/api/items/file", upload.single("file"), async (req, res) => {
     const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
     const title = `Learning Session - ${dateStr}`;
 
-    // 1. Create Study Item
+    // 1. Create Study Item with profile_id and file_data
     const itemRes = await pool.query(
-      "INSERT INTO public.study_items (title, kind, file_name) VALUES ($1, $2, $3) RETURNING id",
-      [title, "pdf", req.file.originalname]
+      "INSERT INTO public.study_items (title, kind, file_name, profile_id, file_data) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [title, "pdf", req.file.originalname, req.user.id, req.file.buffer]
     );
     const itemId = itemRes.rows[0].id;
-
-    // Save File Statically for Frontend Viewing
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    const filePath = path.join(uploadsDir, `${itemId}_${req.file.originalname}`);
-    fs.writeFileSync(filePath, req.file.buffer);
 
     // 2. Forward File to FastAPI for chunking, embedding, and generating cards
     const formData = new FormData();
@@ -394,20 +431,55 @@ app.post("/api/items/file", upload.single("file"), async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
+// 5B. STREAM FILE FROM DATABASE (BYTEA DATA TO BROWSER)
+app.get("/api/items/:id/file", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  
+  if (id === "default-pdf") {
+    return res.status(404).json({ error: "Default PDF is handled locally by mockData" });
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT file_name, file_data FROM public.study_items WHERE id = $1 AND profile_id = $2",
+      [id, req.user.id]
+    );
+    
+    if (result.rows.length === 0 || !result.rows[0].file_data) {
+      return res.status(404).json({ error: "File not found in database" });
+    }
+
+    const { file_name, file_data } = result.rows[0];
+    const ext = path.extname(file_name || "").toLowerCase();
+    
+    let contentType = "application/octet-stream";
+    if (ext === ".pdf") contentType = "application/pdf";
+    else if (ext === ".docx") contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    else if (ext === ".txt") contentType = "text/plain";
+    else if (ext === ".png") contentType = "image/png";
+    else if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `inline; filename="${file_name}"`);
+    res.send(file_data);
+  } catch (e) {
+    console.error("❌ Database file retrieval failed:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 6. PROCESS YOUTUBE (FORWARD TO FASTAPI)
-// -------------------------------------------------------------
-app.post("/api/items/youtube", async (req, res) => {
+app.post("/api/items/youtube", authenticateUser, async (req, res) => {
   const { url } = req.body;
   try {
     const today = new Date();
     const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
     const title = `Learning Session - ${dateStr}`;
 
-    // 1. Create Study Item
+    // 1. Create Study Item with profile_id
     const itemRes = await pool.query(
-      "INSERT INTO public.study_items (title, kind, youtube_url) VALUES ($1, $2, $3) RETURNING id",
-      [title, "youtube", url]
+      "INSERT INTO public.study_items (title, kind, youtube_url, profile_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [title, "youtube", url, req.user.id]
     );
     const itemId = itemRes.rows[0].id;
 
@@ -444,10 +516,8 @@ app.post("/api/items/youtube", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 7. PROCESS WEBSITE (FORWARD TO FASTAPI)
-// -------------------------------------------------------------
-app.post("/api/items/website", async (req, res) => {
+app.post("/api/items/website", authenticateUser, async (req, res) => {
   const { url } = req.body;
   try {
     const today = new Date();
@@ -455,8 +525,8 @@ app.post("/api/items/website", async (req, res) => {
     const title = `Learning Session - ${dateStr}`;
 
     const itemRes = await pool.query(
-      "INSERT INTO public.study_items (title, kind, youtube_url) VALUES ($1, $2, $3) RETURNING id",
-      [title, "website", url]
+      "INSERT INTO public.study_items (title, kind, youtube_url, profile_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [title, "website", url, req.user.id]
     );
     const itemId = itemRes.rows[0].id;
 
@@ -485,20 +555,17 @@ app.post("/api/items/website", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 8. PROCESS TEXT (FORWARD TO FASTAPI)
-// -------------------------------------------------------------
-app.post("/api/items/text", async (req, res) => {
+app.post("/api/items/text", authenticateUser, async (req, res) => {
   const { text } = req.body;
   try {
     const today = new Date();
     const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-    const wordCount = text.trim().split(/\s+/).length;
     const title = `Learning Session - ${dateStr}`;
 
     const itemRes = await pool.query(
-      "INSERT INTO public.study_items (title, kind, content) VALUES ($1, $2, $3) RETURNING id",
-      [title, "text", text]
+      "INSERT INTO public.study_items (title, kind, content, profile_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [title, "text", text, req.user.id]
     );
     const itemId = itemRes.rows[0].id;
 
@@ -525,10 +592,8 @@ app.post("/api/items/text", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 9. PROCESS DEEP RESEARCH (FORWARD TO FASTAPI)
-// -------------------------------------------------------------
-app.post("/api/items/research", async (req, res) => {
+app.post("/api/items/research", authenticateUser, async (req, res) => {
   const { topic } = req.body;
   try {
     const today = new Date();
@@ -536,8 +601,8 @@ app.post("/api/items/research", async (req, res) => {
     const title = `Learning Session - ${dateStr}`;
 
     const itemRes = await pool.query(
-      "INSERT INTO public.study_items (title, kind) VALUES ($1, $2) RETURNING id",
-      [title, "research"]
+      "INSERT INTO public.study_items (title, kind, profile_id) VALUES ($1, $2, $3) RETURNING id",
+      [title, "research", req.user.id]
     );
     const itemId = itemRes.rows[0].id;
 
@@ -566,10 +631,8 @@ app.post("/api/items/research", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 10. CHAT Q&A (RAG-BASED CHAT ROUTED TO FASTAPI)
-// -------------------------------------------------------------
-app.post("/api/items/:id/chat", async (req, res) => {
+app.post("/api/items/:id/chat", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   const { question } = req.body;
 
@@ -621,15 +684,8 @@ app.post("/api/items/:id/chat", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`🔥 Node.js API Gateway running on http://localhost:${port}`);
-});
-
-// -------------------------------------------------------------
-// NOTEBOOK LM FEATURES: PINS, PODCAST, BRIEFING
-// -------------------------------------------------------------
-
-app.post("/api/items/:id/pins", async (req, res) => {
+// 11. PINS
+app.post("/api/items/:id/pins", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   const { content } = req.body;
   if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
@@ -641,7 +697,7 @@ app.post("/api/items/:id/pins", async (req, res) => {
   }
 });
 
-app.delete("/api/items/:id/pins/:pinId", async (req, res) => {
+app.delete("/api/items/:id/pins/:pinId", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id, pinId } = req.params;
   if (!isUuid(id) || !isUuid(pinId)) return res.status(404).json({ error: "Item not found" });
   try {
@@ -652,7 +708,8 @@ app.delete("/api/items/:id/pins/:pinId", async (req, res) => {
   }
 });
 
-app.post("/api/items/:id/podcast", async (req, res) => {
+// 12. PODCAST
+app.post("/api/items/:id/podcast", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   const { language = "English", instructions = "", format = "two-hosts", duration = "Medium (~10 mins)", pages = "All", host1Name = "Host 1", host2Name = "Host 2" } = req.body || {};
   if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
@@ -671,7 +728,8 @@ app.post("/api/items/:id/podcast", async (req, res) => {
   }
 });
 
-app.post("/api/items/:id/briefing", async (req, res) => {
+// 13. BRIEFING
+app.post("/api/items/:id/briefing", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
   if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
   try {
@@ -683,4 +741,8 @@ app.post("/api/items/:id/briefing", async (req, res) => {
     console.error("Briefing generation failed:", e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+app.listen(port, () => {
+  console.log(`🔥 Node.js API Gateway running on http://localhost:${port}`);
 });

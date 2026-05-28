@@ -1,5 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { supabase } from "../integrations/supabase/client";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({
@@ -13,9 +16,86 @@ export const Route = createFileRoute("/signin")({
 
 function SignInPage() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignIn = () => {
-    navigate({ to: "/dashboard" });
+  // Check if session is already active; if so, redirect immediately
+  useEffect(() => {
+    const checkActiveSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        navigate({ to: "/dashboard" });
+      }
+    };
+    checkActiveSession();
+  }, [navigate]);
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      toast.error("Please enter both email and password.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (isSignUp) {
+        // Sign Up
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: email.split("@")[0],
+            }
+          }
+        });
+        
+        if (error) throw error;
+        
+        if (data.session) {
+          toast.success("Account created and logged in!");
+          navigate({ to: "/dashboard" });
+        } else {
+          toast.success("Signup successful! Please check your email to verify your account.");
+        }
+      } else {
+        // Sign In
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (error) throw error;
+        
+        if (data.session) {
+          toast.success("Welcome back to LearnX!");
+          navigate({ to: "/dashboard" });
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An authentication error occurred.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + "/dashboard",
+        }
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      toast.error(err.message || "Could not connect to Google OAuth.");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -42,13 +122,16 @@ function SignInPage() {
               <ChevronLeft className="h-4 w-4" /> Back to home
             </Link>
             <h1 className="text-3xl font-semibold text-foreground">
-              Sign in to LearnX
+              {isSignUp ? "Create your LearnX account" : "Sign in to LearnX"}
             </h1>
-            <p className="mt-2 italic text-muted-foreground">Your LearnX workspace starts here</p>
+            <p className="mt-2 italic text-muted-foreground">
+              {isSignUp ? "Join thousands of active learners today" : "Your LearnX workspace starts here"}
+            </p>
 
             <button
-              onClick={handleSignIn}
-              className="mt-8 flex w-full items-center justify-center gap-3 rounded-full bg-muted px-6 py-3 text-sm font-medium hover:bg-muted/70"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              className="mt-8 flex w-full items-center justify-center gap-3 rounded-full bg-muted px-6 py-3 text-sm font-medium hover:bg-muted/70 disabled:opacity-50 transition-all"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -63,17 +146,14 @@ function SignInPage() {
               <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSignIn();
-              }}
-              className="space-y-4"
-            >
+            <form onSubmit={handleEmailAuth} className="space-y-4">
               <div>
                 <label className="text-sm font-semibold">Email</label>
                 <input
                   type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. andrewmaske@example.com"
                   className="mt-1 w-full rounded-lg bg-muted px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary"
                 />
@@ -83,6 +163,9 @@ function SignInPage() {
                 <div className="relative mt-1">
                   <input
                     type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full rounded-lg bg-muted px-4 py-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -91,22 +174,30 @@ function SignInPage() {
 
               <button
                 type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-foreground px-6 py-3 text-sm font-semibold text-background hover:opacity-90"
+                disabled={isLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-foreground px-6 py-3 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50 transition-all"
               >
-                <span className="inline-block h-4 w-4 rounded-sm bg-primary" />
-                Sign In
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-background" />
+                ) : (
+                  <span className="inline-block h-4 w-4 rounded-sm bg-primary" />
+                )}
+                {isSignUp ? "Create Account" : "Sign In"}
               </button>
             </form>
 
             <p className="mt-4 text-xs italic text-muted-foreground">
-              By continuing, you agree to our <a className="underline">Terms</a> and{" "}
-              <a className="underline">Privacy Policy</a>.
+              By continuing, you agree to our <a className="underline cursor-pointer">Terms</a> and{" "}
+              <a className="underline cursor-pointer">Privacy Policy</a>.
             </p>
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <button className="font-semibold text-primary hover:underline">
-                Sign Up
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="font-semibold text-primary hover:underline focus:outline-none"
+              >
+                {isSignUp ? "Sign In" : "Sign Up"}
               </button>
             </p>
           </div>
