@@ -23,11 +23,12 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn("[WARNING] Missing Supabase environment keys. Authenticated requests might fail.");
+let supabase = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+} else {
+  console.warn("⚠️ [WARNING] Missing Supabase environment keys. User authentication will be disabled until SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are configured.");
 }
-
-const supabase = createClient(supabaseUrl || "", supabaseKey || "");
 
 // Setup Multer for memory storage file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -56,6 +57,10 @@ const isUuid = (id) => uuidRegex.test(id);
 
 // Middleware to validate Supabase JWT token
 const authenticateUser = async (req, res, next) => {
+  if (!supabase) {
+    return res.status(500).json({ error: "Server Configuration Error: Supabase client is not initialized. Please set SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in environment variables." });
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or invalid authorization token" });
