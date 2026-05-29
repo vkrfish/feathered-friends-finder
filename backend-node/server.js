@@ -20,14 +20,14 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // Setup Supabase client for backend JWT authentication
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || "https://peafnjhrzfetfwlksysq.supabase.co";
+const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_gXyBjhVHkwh_55YHQ4I3qQ_R62JEwzo";
 
 let supabase = null;
 if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 } else {
-  console.warn("⚠️ [WARNING] Missing Supabase environment keys. User authentication will be disabled until SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are configured.");
+  console.warn("⚠️ [WARNING] Missing Supabase environment keys. User authentication will be disabled.");
 }
 
 // Setup Multer for memory storage file uploads
