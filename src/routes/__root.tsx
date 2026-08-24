@@ -73,9 +73,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "LearnX — The AI study assistant that turns chaos into preparation" },
-      { name: "description", content: "Upload your files. Let AI handle the teaching & preparation. LearnX turns 800-page PDFs, YouTube lectures and messy notes into flashcards, quizzes and mind maps in seconds." },
+      {
+        name: "description",
+        content:
+          "Upload your files. Let AI handle the teaching & preparation. LearnX turns 800-page PDFs, YouTube lectures and messy notes into flashcards, quizzes and mind maps in seconds.",
+      },
       { property: "og:title", content: "LearnX — Study smarter, not harder" },
-      { property: "og:description", content: "The AI study assistant that turns chaos into preparation." },
+      {
+        property: "og:description",
+        content: "The AI study assistant that turns chaos into preparation.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
@@ -86,7 +93,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Caveat:wght@500;700&family=Work+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap",
       },
     ],
   }),

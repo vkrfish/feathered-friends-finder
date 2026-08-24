@@ -1,10 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  Sparkles,
+  FileText,
+  Youtube,
+  Search,
+  Check,
+  ArrowRight,
+  BookOpen,
+  Flame,
+  HelpCircle,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({ component: Index });
 
 const CDN = "https://c.animaapp.com/mph5rn45Kmor9l/assets";
-const LOGO = `${CDN}/logo-icon.svg`;
 
 const unis = [
   "5zVEY4Masnnk7YzRbn5Er5jXnU",
@@ -20,14 +30,44 @@ const unis = [
 
 function Nav() {
   return (
-    <header className="sticky top-4 z-50 mx-auto w-[min(960px,92vw)]">
-      <nav className="flex items-center justify-between rounded-full border border-border bg-card/80 px-3 py-2 backdrop-blur-xl shadow-[0_8px_30px_-12px_oklch(0_0_0/0.2)]">
-        <a href="#" className="flex items-center gap-2 pl-2">
-          <span className="font-display text-xl">LearnX</span>
+    <header className="sticky top-4 z-50 mx-auto w-[min(1140px,94vw)]">
+      <nav className="flex items-center justify-between rounded-full border border-white/10 bg-card/60 px-4 py-2.5 backdrop-blur-xl shadow-2xl">
+        <a href="#" className="flex items-center gap-2 pl-3">
+          <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary/20 border border-primary/30">
+            <div
+              className="h-3.5 w-3.5 rotate-45 bg-primary"
+              style={{ clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)" }}
+            />
+          </div>
+          <span className="font-display text-xl font-bold tracking-tight text-white glow-text">
+            LearnX
+          </span>
         </a>
-        <a href="#pricing" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block">pricing</a>
-        <a href="/signin" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03]">
-          Get started
+        <div className="flex items-center gap-6">
+          <a
+            href="#features"
+            className="hidden text-sm text-muted-foreground transition-colors hover:text-white sm:block"
+          >
+            features
+          </a>
+          <a
+            href="#pricing"
+            className="hidden text-sm text-muted-foreground transition-colors hover:text-white sm:block"
+          >
+            pricing
+          </a>
+          <a
+            href="#faq"
+            className="hidden text-sm text-muted-foreground transition-colors hover:text-white sm:block"
+          >
+            faq
+          </a>
+        </div>
+        <a
+          href="/signin"
+          className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 active:scale-95 shadow-[0_0_15px_oklch(0.82_0.14_160/0.25)]"
+        >
+          Cram now →
         </a>
       </nav>
     </header>
@@ -36,43 +76,191 @@ function Nav() {
 
 function Hero() {
   return (
-    <section className="relative mx-auto max-w-[1200px] px-6 pt-16 pb-24">
-      {/* floating scrapbook images */}
-      <img src={`${CDN}/63.jpg`} alt="coffee" style={{ ["--r" as never]: "-8deg" }} className="float absolute left-0 top-8 hidden h-40 w-32 rotate-[-8deg] rounded-md object-cover paper md:block" />
-      <img src={`${CDN}/61.jpg`} alt="" style={{ ["--r" as never]: "12deg" }} className="float absolute left-[18%] top-48 hidden h-28 w-28 rotate-[12deg] rounded-md object-cover paper md:block" />
-      <img src={`${CDN}/64.jpg`} alt="" style={{ ["--r" as never]: "-4deg" }} className="float absolute left-[42%] top-4 hidden h-32 w-44 rotate-[-4deg] rounded-md object-cover paper md:block" />
-      <img src={`${CDN}/66.jpg`} alt="" style={{ ["--r" as never]: "8deg" }} className="float absolute right-2 top-16 hidden h-36 w-36 rotate-[8deg] rounded-md object-cover paper md:block" />
-      <img src={`${CDN}/68.jpg`} alt="" style={{ ["--r" as never]: "-12deg" }} className="float absolute right-[20%] top-56 hidden h-28 w-32 rotate-[-12deg] rounded-md object-cover paper md:block" />
+    <section className="relative mx-auto max-w-[1200px] px-6 pt-16 pb-20 text-center">
+      {/* Background ambient light */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-primary/5 blur-[120px] pointer-events-none rounded-full" />
 
-      <div className="relative mx-auto max-w-3xl pt-24 text-center">
-        <p className="font-hand text-3xl text-muted-foreground">Grab Your coffee and get started for <span className="marker-yellow font-semibold text-foreground">FREE!!</span></p>
-        <div className="mx-auto mt-10 text-center">
-          <h1 className="font-display text-7xl leading-none tracking-tight md:text-8xl">LearnX</h1>
+      <div className="relative mx-auto max-w-4xl pt-12">
+        <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-medium text-primary shadow-inner">
+          <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+          <span>Clutch exam prep for 2 A.M. panic attacks</span>
         </div>
-        <p className="mx-auto mt-10 max-w-2xl font-display text-3xl leading-tight md:text-4xl">
-          The AI study assistant that turns <span className="marker-yellow">chaos</span> into <span className="marker-mint">preparation</span>.
+
+        <h1 className="font-display text-5xl font-bold leading-none tracking-tight text-white sm:text-7xl lg:text-8xl">
+          The AI study assistant for when you're{" "}
+          <span className="highlight-gradient">completely cooked</span>.
+        </h1>
+
+        <p className="mx-auto mt-8 max-w-2xl text-lg text-muted-foreground leading-relaxed">
+          We know you haven’t opened the lecture slides since Week 1. Don't worry. LearnX digests
+          800-page textbooks, long YouTube lectures, and messy PDFs into active recall cards,
+          Socratic tutor chats, and podcasts in seconds. <b>No cap, actually works.</b>
         </p>
-        <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground">
-          Teaches <b>YOU!</b>, Asks <b>YOU!</b> &amp; Prepares <b>YOU!</b> instantly from your files.
-        </p>
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <a href="#demo" className="rounded-full border border-border bg-card px-5 py-3 text-sm font-medium transition-colors hover:bg-muted">
+
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <a
+            href="/signin"
+            className="rounded-full bg-primary px-7 py-3.5 text-base font-semibold text-primary-foreground transition-all hover:brightness-110 active:scale-95 shadow-[0_0_20px_oklch(0.82_0.14_160/0.3)]"
+          >
+            Start Cramming for Free
+          </a>
+          <a
+            href="#demo"
+            className="rounded-full border border-white/10 bg-white/5 px-7 py-3.5 text-base font-medium text-white transition-all hover:bg-white/10"
+          >
             ▶ Watch demo
           </a>
-          <a href="/signin" className="rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-transform hover:scale-[1.03]">
-            Get started →
-          </a>
+        </div>
+
+        {/* Humorous Student Quote Box */}
+        <div className="mx-auto mt-8 max-w-lg rounded-xl border border-white/5 bg-white/[0.02] p-4 text-xs italic text-muted-foreground shadow-md backdrop-blur-sm">
+          "I had a 200-page biology exam in 6 hours. Fed the slides to LearnX, completed 50 active
+          recall reps, and passed with an A-. <b>Source: Trust me bro, it works.</b>" — Vasanth, CS
+          Student (99% caffeine, 1% hope)
         </div>
       </div>
 
-      {/* Sticky note */}
-      <div className="relative mx-auto mt-20 max-w-md">
-        <div className="rotate-[3deg] bg-sticky p-8 paper">
-          <p className="font-hand text-3xl leading-snug">
-            <b>Help's</b> you get <i>prepared</i> for your <b>EXAMS</b> @ <span className="text-5xl">2</span><span className="text-xl">A.M.</span>
-          </p>
-          <p className="mt-4 font-hand text-lg text-muted-foreground">Source: Trust me bro!</p>
-          <div className="mt-3 inline-block rounded-full bg-primary px-4 py-1 text-xs font-bold text-primary-foreground">FR, FR 😆 !!!</div>
+      {/* PREMIUM INTERACTIVE WORKSPACE WIDGET PREVIEW (NotebookLM style) */}
+      <div
+        id="demo"
+        className="mt-20 mx-auto max-w-[1000px] rounded-2xl border border-white/10 bg-[#0c0d12] p-2 shadow-2xl relative"
+      >
+        <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-white/10 to-transparent -z-10" />
+
+        {/* Header toolbar */}
+        <div className="flex items-center justify-between border-b border-white/5 px-4 py-3 bg-[#0d0f15]/80 rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full bg-red-500/80" />
+            <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
+            <span className="h-3 w-3 rounded-full bg-green-500/80" />
+            <span className="ml-2 text-xs font-mono text-muted-foreground">
+              workspace_biology_midterm_v2.json
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-[11px] text-orange-400 bg-orange-400/5 border border-orange-400/10 px-2 py-0.5 rounded-full">
+              <Flame className="h-3 w-3" />
+              <span>2 day streak</span>
+            </div>
+            <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <span className="text-xs text-primary font-medium">AI Connected</span>
+          </div>
+        </div>
+
+        {/* Workspace Panels */}
+        <div className="grid grid-cols-1 md:grid-cols-12 min-h-[420px] bg-[#090a0f] rounded-b-xl overflow-hidden">
+          {/* Sources List Sidebar */}
+          <div className="md:col-span-3 border-r border-white/5 p-4 text-left bg-[#0c0d13]/55">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center justify-between">
+              <span>Sources</span>
+              <span className="text-primary font-mono lowercase">3 loaded</span>
+            </h4>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 p-2 text-xs text-primary font-medium">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">biology_lecture_12.pdf</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-white/5 border border-white/5 p-2 text-xs text-white/70 hover:bg-white/10 hover:text-white transition-all cursor-pointer">
+                <Youtube className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                <span className="truncate">Photosynthesis in 5 Mins</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-white/5 border border-white/5 p-2 text-xs text-white/70 hover:bg-white/10 hover:text-white transition-all cursor-pointer">
+                <BookOpen className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                <span className="truncate">Web: Krebs Cycle wiki</span>
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-xl bg-primary/5 border border-primary/10 p-3 text-[11px] text-muted-foreground leading-relaxed">
+              💡 <b>Pro Tip:</b> Generate a study guide or deep briefing document using the action
+              chips in the chat!
+            </div>
+          </div>
+
+          {/* Central Chat Workspace */}
+          <div className="md:col-span-5 border-r border-white/5 p-4 flex flex-col justify-between text-left">
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+              <div className="rounded-xl bg-white/[0.02] border border-white/5 p-3 text-xs text-white/80">
+                <span className="font-mono text-muted-foreground block text-[10px] mb-1">User</span>
+                Explain the electron transport chain like I am 5 years old.
+              </div>
+              <div className="rounded-xl bg-primary/5 border border-primary/10 p-3 text-xs text-white/80">
+                <span className="font-mono text-primary block text-[10px] mb-1">LearnX Tutor</span>
+                Imagine a water slide. Electrons are kids sliding down, passing a basketball
+                (energy) to their friends on each deck. This energy pumps water (hydrogen) upstairs,
+                which spins a giant waterwheel (ATP synthase) to make power! ⚡
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/5">
+              <div className="flex gap-1.5 flex-wrap mb-2">
+                <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/5 text-white/60 hover:text-white hover:border-white/20 transition-all cursor-pointer">
+                  📝 Study Guide
+                </span>
+                <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/5 text-white/60 hover:text-white hover:border-white/20 transition-all cursor-pointer">
+                  🎙️ Podcast
+                </span>
+                <span className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/5 text-white/60 hover:text-white hover:border-white/20 transition-all cursor-pointer">
+                  🔥 Quiz Me
+                </span>
+              </div>
+              <div className="flex gap-2 rounded-full border border-white/10 bg-[#0d0f15] px-3.5 py-1.5 items-center justify-between shadow-inner">
+                <input
+                  disabled
+                  placeholder="Ask about biology_lecture_12..."
+                  className="bg-transparent text-xs text-white outline-none w-full placeholder:text-white/20"
+                />
+                <button className="h-6 w-6 rounded-full bg-primary/20 text-primary border border-primary/20 grid place-items-center cursor-default shrink-0">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Notes & Active Recall Panel */}
+          <div className="md:col-span-4 p-4 text-left bg-[#08090d]/30">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center justify-between">
+              <span>Active Recall Deck</span>
+              <span className="text-primary font-mono">Card 3/12</span>
+            </h4>
+
+            {/* 3D-styled Flashcard mock */}
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.05] to-transparent p-5 min-h-[160px] flex flex-col justify-between shadow-lg relative overflow-hidden group">
+              <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 rounded-bl-full pointer-events-none" />
+              <div>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-2 py-0.5 rounded">
+                  Biology exam core
+                </span>
+                <p className="mt-4 text-sm font-medium text-white leading-snug">
+                  What is the primary function of ATP synthase during cellular respiration?
+                </p>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  Click to reveal answer
+                </span>
+                <span className="h-5 w-5 rounded-full bg-primary/15 text-primary grid place-items-center text-xs font-bold font-mono">
+                  A
+                </span>
+              </div>
+            </div>
+
+            {/* Quick stats */}
+            <div className="mt-4 grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-lg bg-white/[0.02] border border-white/5 p-2.5">
+                <span className="text-lg font-bold text-white">92%</span>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
+                  Recall accuracy
+                </p>
+              </div>
+              <div className="rounded-lg bg-white/[0.02] border border-white/5 p-2.5">
+                <span className="text-lg font-bold text-primary">1.2 hours</span>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
+                  Study time saved
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -81,17 +269,47 @@ function Hero() {
 
 function Upload() {
   return (
-    <section className="mx-auto max-w-[1200px] px-6 py-20">
-      <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
-        <div className="relative">
-          <img src={`${CDN}/69.jpg`} alt="AI folder" className="rotate-[-3deg] rounded-2xl paper" />
-          <div className="absolute -bottom-6 -right-4 rotate-[8deg] rounded-full bg-card px-4 py-2 paper font-hand text-xl">AI teacher inside ....</div>
+    <section className="mx-auto max-w-[1200px] px-6 py-20 border-t border-white/5">
+      <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
+        <div className="relative group">
+          <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-primary/30 to-indigo-500/10 opacity-30 blur-lg transition-all group-hover:opacity-50" />
+          <img
+            src={`${CDN}/69.jpg`}
+            alt="AI folder"
+            className="relative rounded-2xl border border-white/10 object-cover shadow-2xl brightness-95"
+          />
+          <div className="absolute -bottom-4 -right-4 rounded-full bg-card border border-white/10 px-4 py-2 text-xs font-semibold tracking-wider text-primary shadow-lg">
+            ⚡ AI Vector Indexing Active
+          </div>
         </div>
-        <div>
-          <h2 className="font-display text-5xl leading-tight md:text-6xl">
-            <span className="marker-yellow">UPLOAD</span> your files.<br />
-            Let AI handle the <i>teaching</i> &amp; <i>preparation</i>
+        <div className="text-left">
+          <div className="inline-flex h-8 items-center rounded-full bg-white/5 px-3.5 text-xs font-medium text-white border border-white/5 mb-4">
+            📂 Drag. Drop. Learn.
+          </div>
+          <h2 className="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl leading-tight">
+            Dump your <span className="highlight-gradient">syllabus files</span>.<br />
+            Let AI extract the raw facts.
           </h2>
+          <p className="mt-6 text-base text-muted-foreground leading-relaxed">
+            Stop highlighting random lines in your textbook hoping they’ll stick. LearnX builds a
+            personalized knowledge graph using semantic vector embeddings on Postgres (via
+            pgvector). It strip-mines PDFs, lectures, and web nodes of their academic fluff and
+            hands you back a clean, actionable study workspace.
+          </p>
+          <div className="mt-8 flex flex-col gap-3">
+            <div className="flex items-center gap-2.5 text-sm text-white/80">
+              <div className="grid h-5 w-5 place-items-center rounded-full bg-primary/20 text-primary border border-primary/20">
+                <Check className="h-3 w-3" />
+              </div>
+              <span>Upload PDFs, DOCX, PowerPoint up to 15 MB</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-sm text-white/80">
+              <div className="grid h-5 w-5 place-items-center rounded-full bg-primary/20 text-primary border border-primary/20">
+                <Check className="h-3 w-3" />
+              </div>
+              <span>Instant text analysis & Spaced Repetition flashcards</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -100,24 +318,65 @@ function Upload() {
 
 function PowerPrep() {
   const cards = [
-    { img: "90.jpg", title: "AI Tutor", desc: "Turns you into that genius Student!!" },
-    { img: "75.jpg", title: "Best AI for Exams", desc: "Built on learning science. Ace every test." },
-    { img: "81.jpg", title: "Active Recall", desc: "Flashcards & quizzes that actually stick." },
-    { img: "72.jpg", title: "Socratic Mode", desc: "AI that teaches, not just answers." },
-    { img: "77.jpg", title: "There are no LIMITS!", desc: "Upload, ask, learn. Unlimited curiosity." },
+    {
+      title: "Socratic AI Tutor",
+      desc: "No copy-pasting code answers. Our AI tutor actually forces you to retrieve the concepts, calling you out when you are yapping on a guess.",
+      badge: "No Cap",
+    },
+    {
+      title: "Smart Active Recall",
+      desc: "Adaptive flashcard decks that adjust to your memory decay curve. Rapid-fire reps that lock definitions straight into your memory.",
+      badge: "Scientific",
+    },
+    {
+      title: "Briefing Dossiers",
+      desc: "Digests dense textbooks and transforms them into beautifully summarized, highly organized briefing documents with reference pins.",
+      badge: "Saves Hours",
+    },
+    {
+      title: "Custom Audio Podcasts",
+      desc: "Generate a natural two-host podcast episode discussing your notes. Listen on your AirPods on the way to class, no boring lectures.",
+      badge: "Podcast Mode",
+    },
+    {
+      title: "Deep Research Scour",
+      desc: "When your lecture slides are lacking, the research agent searches verified web directories to compile deep dossiers on the fly.",
+      badge: "Agentic",
+    },
   ];
   return (
-    <section className="mx-auto max-w-[1200px] px-6 py-20">
-      <h2 className="font-display text-6xl md:text-7xl">Power <span className="marker-mint">Prep</span></h2>
-      <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
-        {cards.map((c) => (
-          <div key={c.img} className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card paper transition-transform hover:-translate-y-1">
-            <img src={`${CDN}/${c.img}`} alt={c.title} className="aspect-[4/5] w-full object-cover" />
-            <div className="p-4">
-              <h3 className="font-display text-2xl leading-tight">{c.title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{c.desc}</p>
-              <a href="#" className="mt-3 inline-block text-sm font-semibold text-primary">Know more →</a>
+    <section id="features" className="mx-auto max-w-[1200px] px-6 py-20 border-t border-white/5">
+      <div className="text-center max-w-2xl mx-auto">
+        <h2 className="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl">
+          Everything you need to <span className="highlight-gradient">pass the midterm</span>.
+        </h2>
+        <p className="mt-4 text-muted-foreground text-sm sm:text-base">
+          Built on learning science, designed for short attention spans. We swap midnight panic
+          sessions for maximum efficiency.
+        </p>
+      </div>
+
+      <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((c, idx) => (
+          <div
+            key={idx}
+            className="notebook-card rounded-2xl p-6 flex flex-col justify-between text-left relative overflow-hidden group"
+          >
+            <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+            <div>
+              <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                {c.badge}
+              </span>
+              <h3 className="font-display text-2xl font-bold text-white mt-4">{c.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{c.desc}</p>
             </div>
+            <a
+              href="/signin"
+              className="mt-6 flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-white transition-colors"
+            >
+              <span>Start cramming</span>
+              <ArrowRight className="h-3 w-3" />
+            </a>
           </div>
         ))}
       </div>
@@ -127,12 +386,19 @@ function PowerPrep() {
 
 function Trusted() {
   return (
-    <section className="border-y border-border bg-card/40 py-10">
-      <p className="text-center font-hand text-2xl text-muted-foreground">Trusted by top students worldwide</p>
-      <div className="mt-6 overflow-hidden">
-        <div className="ticker flex w-max items-center gap-16 px-8">
+    <section className="border-y border-white/5 bg-card/10 py-12 backdrop-blur-sm overflow-hidden">
+      <p className="text-center text-xs font-medium uppercase tracking-widest text-muted-foreground/80 mb-8">
+        Trusted by top students globally (even the ones who cram the night before)
+      </p>
+      <div className="relative overflow-hidden w-full">
+        <div className="ticker flex w-max items-center gap-20 px-8">
           {[...unis, ...unis].map((u, i) => (
-            <img key={i} src={`${CDN}/${u}.svg`} alt="" className="h-10 w-auto opacity-70 grayscale" />
+            <img
+              key={i}
+              src={`${CDN}/${u}.svg`}
+              alt=""
+              className="h-8 w-auto opacity-40 grayscale invert hover:opacity-80 transition-opacity"
+            />
           ))}
         </div>
       </div>
@@ -141,77 +407,56 @@ function Trusted() {
 }
 
 function HowItWorks() {
-  return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <h2 className="font-display text-6xl md:text-7xl">How it works?</h2>
-      <p className="mt-2 font-hand text-3xl text-muted-foreground">in 3 simple steps</p>
-
-      <div className="mt-12 grid grid-cols-1 gap-10 md:grid-cols-2">
-        <div className="relative">
-          <span className="font-hand text-4xl">Step 1 &amp; 2</span>
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <img src={`${CDN}/73.jpg`} alt="" className="rotate-[-3deg] rounded-xl paper" />
-            <img src={`${CDN}/76.jpg`} alt="" className="rotate-[4deg] rounded-xl paper" />
-          </div>
-          <h3 className="mt-8 font-display text-6xl">
-            <span className="marker-yellow">Drag</span> &amp; <span className="marker-mint">DROP</span><br />your files
-          </h3>
-          <img src={`${CDN}/78.jpg`} alt="" className="mt-6 rounded-2xl paper" />
-        </div>
-        <div>
-          <span className="font-hand text-4xl">Step 3</span>
-          <h3 className="mt-4 font-display text-5xl leading-tight">
-            <span className="marker-yellow">SMMAAASH!!</span><br />that enter button
-          </h3>
-          <img src={`${CDN}/80.png`} alt="" className="mx-auto mt-8 w-full max-w-md rotate-[-2deg]" />
-          <img src={`${CDN}/108.jpg`} alt="" className="mt-6 rounded-2xl paper" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MakeItClick() {
-  const items = [
-    { img: "79.jpg", title: "See the whole board", desc: "Watch 50 pages of dense text snap into a clean, connected map in your mind." },
-    { img: "82.jpg", title: "Just listen", desc: "Pop in your AirPods and let your hardest chapters play out like a podcast." },
-    { img: "83.jpg", title: "Trim the fat", desc: "Zero academic rambling. Just the raw, razor-sharp facts pinned to the wall." },
-    { img: "84.jpg", title: "Make it click", desc: "Stop fighting your brain. We turn messy notes into the exact format that makes the lightbulb snap on." },
-    { img: "85.jpg", title: "Do it", desc: "Stop staring, start tapping. Swipe through rapid-fire reps until it becomes a reflex." },
+  const steps = [
+    {
+      num: "01",
+      title: "Feed the machine",
+      text: "Drag-and-drop your PDFs, lecture recordings, YouTube playlists, or raw text files. We encrypt your files and parse them immediately.",
+    },
+    {
+      num: "02",
+      title: "Synthesize dossier",
+      text: "PostgreSQL pgvector embeds the data. Our RAG engine extracts key questions, builds memory-decay flashcard loops, and generates host scripts.",
+    },
+    {
+      num: "03",
+      title: "Clutch the Grade",
+      text: "Swipe through active recall tests, quiz your knowledge, or generate a two-host audio conversation to listen on the go. Zero fluff.",
+    },
   ];
   return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <h2 className="font-display text-6xl md:text-7xl">Make it <i>click</i>.</h2>
-      <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((it, i) => (
-          <article key={it.img} className={`rounded-2xl border border-border bg-card p-5 paper ${i === 3 ? "lg:col-span-2" : ""}`}>
-            <img src={`${CDN}/${it.img}`} alt={it.title} className="aspect-[4/3] w-full rounded-xl object-cover" />
-            <h3 className="mt-4 font-display text-3xl">{it.title}</h3>
-            <p className="mt-2 text-muted-foreground">{it.desc}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function NewNormal() {
-  return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <h2 className="font-display text-6xl md:text-7xl">The new normal</h2>
-      <div className="mt-10 grid grid-cols-1 items-end gap-10 md:grid-cols-2">
+    <section className="mx-auto max-w-[1200px] px-6 py-24 border-t border-white/5">
+      <div className="text-left md:flex justify-between items-end mb-16">
         <div>
-          <p className="font-display text-4xl leading-snug md:text-5xl">
-            How <span className="marker-yellow">128 countries</span> study today.
-          </p>
-          <p className="mt-6 text-xl text-muted-foreground">
-            Join <b className="text-foreground">20,000 students</b> across <b className="text-foreground">500 universities</b> swapping <span className="marker-mint">2 A.M. panic</span> for a <i>full night's sleep</i>.
-          </p>
+          <span className="text-xs font-bold text-primary tracking-widest uppercase">
+            The Playbook
+          </span>
+          <h2 className="font-display text-4xl font-bold text-white sm:text-5xl md:text-6xl mt-2">
+            Cooked to prepared in <span className="highlight-gradient">3 steps</span>
+          </h2>
         </div>
-        <div className="relative grid grid-cols-2 gap-4">
-          <img src={`${CDN}/86.jpg`} alt="" className="rotate-[-3deg] rounded-2xl paper" />
-          <img src={`${CDN}/87.jpg`} alt="" className="mt-8 rotate-[4deg] rounded-2xl paper" />
-        </div>
+        <p className="mt-4 md:mt-0 text-muted-foreground max-w-sm text-sm sm:text-base">
+          Stop staring blankly at documents. Let the AI build a complete training workspace tailored
+          to your weak points.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+        {steps.map((s) => (
+          <div
+            key={s.num}
+            className="rounded-2xl border border-white/5 bg-card/25 p-8 text-left transition-all hover:border-white/10 hover:bg-card/45 relative group"
+          >
+            <span className="absolute top-6 right-6 font-mono text-5xl font-extrabold text-white/[0.03] group-hover:text-primary/10 transition-colors">
+              {s.num}
+            </span>
+            <div className="h-10 w-10 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold text-base flex items-center justify-center mb-6">
+              {s.num}
+            </div>
+            <h3 className="font-display text-2xl font-bold text-white mb-3">{s.title}</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">{s.text}</p>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -219,22 +464,52 @@ function NewNormal() {
 
 function PowerTools() {
   const tools = [
-    { img: "106.jpg", h: "Deep Research.", t: "Stop falling down Google rabbit holes at 2 A.M. When your syllabus isn't enough, the AI scours the entire web to pull the exact, verified facts you need." },
-    { img: "91.jpg", h: "Feed the machine.", t: "Drop your heaviest, 800-page PDF textbooks straight into the engine. LearnX instantly digests the academic fluff and hands you back a clean, actionable study guide." },
-    { img: "89.jpg", h: "Skip the lecture.", t: "Paste any YouTube URL and walk away. LearnX watches the grueling two-hour video for you and distills it into a sharp, five-minute read." },
-    { img: "88.jpg", h: "Save the group chat.", t: "Don't gatekeep the A+. With exactly one click, beam your AI-generated master study guides directly to your friends." },
-    { img: "97.jpg", h: "Your server, smarter.", t: "Add the LearnX bot to your Discord server. Ask it questions mid-conversation and generate study materials for the entire squad." },
+    {
+      img: "106.jpg",
+      h: "Deep Research Scouring",
+      t: "Stop falling down Wikipedia rabbit holes at 2 A.M. When your syllabus notes are vague, our deep research agent crawls the web, extracts reference citations, and drafts structured study dossiers automatically.",
+    },
+    {
+      img: "91.jpg",
+      h: "Gigantic PDF Digests",
+      t: "Drop your massive, 800-page academic textbooks straight into the engine. LearnX digests the fluff, parses index formulas, and maps the chapters into a clean, connected study guide.",
+    },
+    {
+      img: "89.jpg",
+      h: "Skip YouTube Lectures",
+      t: "Paste any grueling two-hour video lecture link. LearnX watches the video, transcribes the spoken channels, aligns timestamps, and distills the concepts into a 5-minute read.",
+    },
+    {
+      img: "88.jpg",
+      h: "Group Chat Save",
+      t: "Don't gatekeep the A+ grade. With one clean click, beam your AI-generated active recall master study guides and briefing scripts directly to your classmates.",
+    },
   ];
   return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <h2 className="font-display text-6xl md:text-7xl">Power <span className="marker-yellow">Tools</span></h2>
-      <div className="mt-12 space-y-8">
+    <section className="mx-auto max-w-[1200px] px-6 py-20 border-t border-white/5">
+      <div className="text-center max-w-2xl mx-auto mb-16">
+        <span className="text-xs font-bold text-primary tracking-widest uppercase">Pro Mode</span>
+        <h2 className="font-display text-4xl font-bold text-white sm:text-5xl md:text-6xl mt-2">
+          Power utilities for <span className="highlight-gradient">serious study</span>
+        </h2>
+      </div>
+
+      <div className="space-y-12">
         {tools.map((tool, i) => (
-          <div key={tool.img} className={`grid grid-cols-1 items-center gap-8 rounded-3xl border border-border bg-card p-6 paper md:grid-cols-2 ${i % 2 ? "md:[&>img]:order-2" : ""}`}>
-            <img src={`${CDN}/${tool.img}`} alt={tool.h} className="aspect-[4/3] w-full rounded-2xl object-cover" />
-            <div>
-              <h3 className="font-display text-4xl"><span className="marker-mint">{tool.h}</span></h3>
-              <p className="mt-4 text-lg leading-relaxed text-muted-foreground">{tool.t}</p>
+          <div
+            key={i}
+            className={`grid grid-cols-1 items-center gap-8 rounded-3xl border border-white/5 bg-card/20 p-6 md:grid-cols-2 ${i % 2 ? "md:[&>img]:order-2" : ""}`}
+          >
+            <img
+              src={`${CDN}/${tool.img}`}
+              alt={tool.h}
+              className="aspect-[4/3] w-full rounded-2xl object-cover border border-white/10 brightness-90"
+            />
+            <div className="text-left px-4">
+              <h3 className="font-display text-3xl font-bold text-white">
+                <span className="highlight-gradient">{tool.h}</span>
+              </h3>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground">{tool.t}</p>
             </div>
           </div>
         ))}
@@ -243,97 +518,56 @@ function PowerTools() {
   );
 }
 
-function BestAI() {
-  return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <div className="relative rounded-3xl border border-border bg-card p-8 paper md:p-14">
-        <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
-          <div>
-            <p className="font-hand text-2xl text-muted-foreground">Best AI tool for</p>
-            <h2 className="font-display text-6xl leading-tight md:text-7xl">Exam Preparation</h2>
-            <p className="mt-2 font-display text-3xl italic">Active Recall <span className="marker-yellow">Powered</span></p>
-            <p className="mt-6 max-w-md text-muted-foreground">
-              Built on learning science. AI that teaches, not just answers. Adaptive AI tutor with spaced repetition flashcards, quizzes, and Socratic teaching.
-            </p>
-            <a href="#" className="mt-6 inline-block rounded-full bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground">Know more →</a>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <img src={`${CDN}/95.jpg`} alt="" className="rotate-[-4deg] rounded-2xl paper" />
-            <img src={`${CDN}/92.jpg`} alt="" className="mt-6 rotate-[5deg] rounded-2xl paper" />
-            <img src={`${CDN}/93.jpg`} alt="" className="rotate-[3deg] rounded-2xl paper" />
-            <img src={`${CDN}/94.jpg`} alt="" className="mt-6 rotate-[-3deg] rounded-2xl paper" />
-          </div>
-        </div>
-      </div>
-      <div className="mt-12 text-center">
-        <p className="font-hand text-4xl text-muted-foreground">study smarter</p>
-        <p className="font-display text-6xl italic">not harder....</p>
-      </div>
-    </section>
-  );
-}
-
-function Anywhere() {
-  return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
-        <img src={`${CDN}/102.jpg`} alt="" className="rounded-3xl paper" />
-        <div>
-          <h2 className="font-display text-6xl leading-tight md:text-7xl">
-            Anywhere.<br /><i>Everywhere.</i><br />&amp; on the <span className="marker-yellow">GO!</span>
-          </h2>
-          <p className="mt-6 text-lg text-muted-foreground">On your Phone, your tab and even your iMac.</p>
-          <div className="mt-6 flex gap-4">
-            <img src={`${CDN}/96.jpg`} alt="" className="h-24 w-24 rotate-[-4deg] rounded-xl object-cover paper" />
-            <img src={`${CDN}/98.jpg`} alt="" className="h-24 w-32 rotate-[4deg] rounded-xl object-cover paper" />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Chaos() {
-  return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
-        <div>
-          <h2 className="font-display text-6xl leading-tight md:text-7xl">Chaos to<br /><i className="marker-mint">Clarity....</i></h2>
-          <p className="mt-6 max-w-md text-lg text-muted-foreground">
-            Turn the panic of 'too much to study' into the power of knowing <b className="text-foreground">exactly what to answer</b>.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <img src={`${CDN}/99.jpg`} alt="" className="rotate-[-3deg] rounded-2xl paper" />
-          <img src={`${CDN}/103.jpg`} alt="" className="mt-8 rotate-[3deg] rounded-2xl paper" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function Pricing() {
   return (
-    <section id="pricing" className="mx-auto max-w-[1200px] px-6 py-24">
-      <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
-        <div className="relative">
-          <img src={`${CDN}/100.jpg`} alt="" className="rotate-[-4deg] rounded-2xl paper" />
-          <img src={`${CDN}/101.jpg`} alt="" className="absolute -bottom-6 -right-6 h-40 w-40 rotate-[6deg] rounded-2xl object-cover paper" />
-        </div>
-        <div>
-          <p className="font-hand text-3xl text-muted-foreground">Grab a Coffee</p>
-          <h2 className="font-display text-6xl leading-tight md:text-7xl">YES It's <span className="marker-yellow">FREE!</span></h2>
-          <p className="mt-2 font-hand text-xl text-muted-foreground">(We know, we can hardly believe it either.)</p>
-          <p className="mt-6 max-w-md text-lg">
-            Start small. Study on your terms. Choose a <b>7-day pass</b> for a quick sprint, or go monthly, semester, or yearly when you want longer coverage.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">7-day pass</span>
-            <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">Monthly</span>
-            <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">Semester</span>
-            <span className="rounded-full border border-border bg-card px-4 py-2 text-sm">Yearly</span>
+    <section id="pricing" className="mx-auto max-w-[1100px] px-6 py-24 border-t border-white/5">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-r from-card/30 to-card/10 p-8 shadow-2xl backdrop-blur-md relative overflow-hidden md:p-14 text-left">
+        <div className="absolute top-0 right-0 h-40 w-40 bg-primary/5 rounded-bl-full pointer-events-none" />
+
+        <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
+          <div>
+            <span className="text-xs font-bold text-primary tracking-widest uppercase">
+              Pricing
+            </span>
+            <h2 className="font-display text-4xl font-bold text-white sm:text-5xl md:text-6xl mt-2">
+              Yes, it is <span className="highlight-gradient">FREE!</span>
+            </h2>
+            <p className="mt-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              (Because we know your bank account is looking dry.)
+            </p>
+            <p className="mt-6 text-base text-muted-foreground leading-relaxed">
+              We know what it’s like to live off instant ramen and energy drinks. Start cramming
+              immediately for free. Set up your workspace, index your midterms, and unlock the
+              Socratic tutor without needing a credit card.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-2.5">
+              <span className="rounded-full border border-white/5 bg-white/5 px-4.5 py-2 text-xs font-medium text-white/80">
+                7-day trial pass
+              </span>
+              <span className="rounded-full border border-white/5 bg-white/5 px-4.5 py-2 text-xs font-medium text-white/80">
+                Monthly Plan
+              </span>
+              <span className="rounded-full border border-white/5 bg-white/5 px-4.5 py-2 text-xs font-medium text-white/80">
+                Semester Cram
+              </span>
+            </div>
+
+            <a
+              href="/signin"
+              className="mt-8 inline-block rounded-full bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 shadow-lg"
+            >
+              Unlock Workspace Free
+            </a>
           </div>
-          <a href="#" className="mt-6 inline-block rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground">Know more →</a>
+          <div className="relative group">
+            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-primary/30 to-indigo-500/10 opacity-30 blur-lg transition-all" />
+            <img
+              src={`${CDN}/100.jpg`}
+              alt="Study desk"
+              className="relative rounded-2xl border border-white/10 object-cover shadow-2xl brightness-90 rotate-[-2deg]"
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -341,22 +575,43 @@ function Pricing() {
 }
 
 function CTA() {
-  const tag = "7-day pass, monthly, semester, or yearly — pick the study plan that fits ★";
   return (
-    <section id="get-started" className="py-24">
-      <div className="mx-auto max-w-[1200px] px-6">
-        <h2 className="font-display text-6xl leading-tight md:text-8xl">
-          Don't just take your next test.<br /><span className="marker-yellow">Crush it.</span>
+    <section className="py-24 border-t border-white/5 bg-[#07080c] relative overflow-hidden">
+      <div className="absolute inset-0 bg-primary/[0.02] pointer-events-none blur-3xl rounded-full translate-y-1/2" />
+      <div className="mx-auto max-w-[1200px] px-6 text-center">
+        <h2 className="font-display text-5xl font-bold leading-tight text-white sm:text-7xl">
+          Don't just take your next exam.
+          <br />
+          <span className="highlight-gradient">Absolutely dominate it.</span>
         </h2>
-        <img src={`${CDN}/104.jpg`} alt="" className="mt-10 w-full rounded-3xl paper" />
+        <p className="mx-auto mt-6 max-w-xl text-base text-muted-foreground leading-relaxed">
+          Stop staring at slides hoping they will absorb into your brain by osmosis. Join thousands
+          of students cramming smarter, memorizing faster, and getting sleep.
+        </p>
         <div className="mt-10 flex justify-center">
-          <a href="/signin" className="rounded-full bg-primary px-8 py-4 text-base font-semibold text-primary-foreground">Get started →</a>
+          <a
+            href="/signin"
+            className="rounded-full bg-primary px-8 py-4 text-base font-semibold text-primary-foreground transition-all hover:brightness-110 shadow-[0_0_20px_oklch(0.82_0.14_160/0.3)]"
+          >
+            Start Cramming Now →
+          </a>
         </div>
       </div>
-      <div className="mt-16 overflow-hidden border-y border-border bg-card py-5">
-        <div className="ticker flex w-max items-center gap-12 whitespace-nowrap px-6 font-display text-2xl">
+
+      {/* Ticker bar detailing humorous triggers */}
+      <div className="mt-20 overflow-hidden border-y border-white/5 bg-card/30 py-4.5 backdrop-blur-sm">
+        <div className="ticker flex w-max items-center gap-16 whitespace-nowrap px-6 text-xs uppercase font-mono tracking-widest text-muted-foreground/60">
           {Array.from({ length: 12 }).map((_, i) => (
-            <span key={i} className="text-muted-foreground">{tag}</span>
+            <span key={i} className="flex items-center gap-2">
+              <Check className="h-4.5 w-4.5 text-primary" />
+              <span>No Cap Cramming</span>
+              <span className="mx-3">•</span>
+              <span>2 A.M. Approved</span>
+              <span className="mx-3">•</span>
+              <span>Zero boring yapping</span>
+              <span className="mx-3">•</span>
+              <span>100% Student Tested</span>
+            </span>
           ))}
         </div>
       </div>
@@ -364,46 +619,71 @@ function CTA() {
   );
 }
 
-function Founder() {
-  return (
-    <section className="mx-auto max-w-[1200px] px-6 py-24">
-      <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2">
-        <img src={`${CDN}/107.jpg`} alt="Founder with dog" className="rotate-[-3deg] rounded-2xl paper" />
-        <div>
-          <p className="font-hand text-3xl text-muted-foreground">Notes from builder</p>
-          <img src={`${CDN}/105.jpg`} alt="Handwritten notes from the builder" className="mt-6 rounded-2xl paper" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 const faqs = [
-  { q: "Why is LearnX better than ChatGPT or Perplexity?", a: "ChatGPT is a Chatbot. LearnX is a Teacher. ChatGPT gives you answers, which feels good but creates 'Knowledge Illusions.' LearnX forces you to retrieve information via Spaced Repetition and Quizzes. We also ground every answer in your specific PDFs, so you never get hallucinated facts about biology when you're studying history." },
-  { q: "How does it beat NotebookLM?", a: "NotebookLM is amazing for 'talking to docs'. But it stops there. LearnX takes the next step: Active Recall. We don't just summarize; we build a full study system (Flashcards, Quizzes, and Mind Maps) to ensure you actually memorize the content for the exam, not just read it." },
-  { q: "Why is it better than YouLearn & MindGrasp?", a: "We focus on mastery, not just consumption. Other apps let you watch videos or read notes. LearnX works backward from the exam: 'What do I need to know?' It breaks concepts down, tests you relentlessly, and adapts to your weak spots." },
-  { q: "How does LearnX AI work?", a: "Simply upload your study materials (PDFs, slides, or paste text), and our AI will instantly generate summaries, flashcards, and quizzes. You can also chat with your documents to get answers to specific questions." },
-  { q: "Is my data secure?", a: "Yes. Your uploads are encrypted in transit and at rest. We never train public models on your private files." },
+  {
+    q: "Why is LearnX better than ChatGPT?",
+    a: "ChatGPT is a generic chatbot. It is a professional yapper. LearnX is a personalized teacher. ChatGPT gives you essays that feel good but create 'Knowledge Illusions' where you think you understand but fail the test. LearnX forces you to retrieve information via Spaced Repetition flashcards and Quizzes, grounding every response in your specific uploads so you never get hallucinated facts.",
+  },
+  {
+    q: "Is this going to beat NotebookLM?",
+    a: "NotebookLM is amazing for summarizing documents. But it stops there. LearnX takes the next step: Active Recall. We don't just dump summaries; we build a full interactive testing system (3D Flashcards, quizzes, and custom host TTS scripts) to ensure you actually memorize the material for the exam, not just read it once.",
+  },
+  {
+    q: "Why is it better than YouLearn or MindGrasp?",
+    a: "We focus on exam mastery, not just consumption. Other apps let you watch videos. LearnX works backward from the midterm test questions: 'What will they ask, and how can I memorize it?' We test you relentlessly and adapt to your weakest memory spots.",
+  },
+  {
+    q: "Is my data secure?",
+    a: "Yes. Your uploads are fully encrypted in transit and at rest. We never sell your data or train public models on your private lecture slides. Your cram sessions are strictly confidential.",
+  },
+  {
+    q: "Is it actually free?",
+    a: "Yes, it is completely free to start. We are students ourselves, so we know the budget is strictly ramen noodles. You can upload documents and use the Socratic chat without spending a single cent.",
+  },
 ];
 
 function FAQ() {
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <section className="mx-auto max-w-[900px] px-6 py-24">
-      <p className="font-hand text-3xl text-muted-foreground">Got questions?</p>
-      <h2 className="font-display text-7xl">FAQ</h2>
-      <p className="mt-3 text-lg text-muted-foreground">Everything you need to know before you start studying smarter.</p>
-      <div className="mt-10 space-y-3">
+    <section
+      id="faq"
+      className="mx-auto max-w-[850px] px-6 py-24 border-t border-white/5 text-left"
+    >
+      <div className="text-center mb-12">
+        <span className="text-xs font-bold text-primary tracking-widest uppercase">FAQ</span>
+        <h2 className="font-display text-4xl font-bold text-white sm:text-5xl">Got questions?</h2>
+        <p className="mt-2 text-muted-foreground text-sm">
+          Everything you need to know before you start studying smarter.
+        </p>
+      </div>
+
+      <div className="space-y-4">
         {faqs.map((f, i) => (
-          <div key={i} className="overflow-hidden rounded-2xl border border-border bg-card paper">
-            <button onClick={() => setOpen(open === i ? null : i)} className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left">
+          <div
+            key={i}
+            className="rounded-xl border border-white/5 bg-card/25 overflow-hidden transition-colors hover:bg-card/45"
+          >
+            <button
+              onClick={() => setOpen(open === i ? null : i)}
+              className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left outline-none"
+            >
               <span className="flex items-center gap-4">
-                <span className="font-mono text-sm text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
-                <span className="font-display text-2xl">{f.q}</span>
+                <span className="font-mono text-xs text-primary font-bold">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="text-base font-semibold text-white/95">{f.q}</span>
               </span>
-              <span className={`text-2xl transition-transform ${open === i ? "rotate-45" : ""}`}>+</span>
+              <span
+                className={`text-xl text-primary transition-transform duration-300 ${open === i ? "rotate-45" : ""}`}
+              >
+                +
+              </span>
             </button>
-            {open === i && <div className="px-6 pb-6 pl-16 text-muted-foreground">{f.a}</div>}
+            {open === i && (
+              <div className="px-6 pb-6 pl-14 text-sm text-muted-foreground leading-relaxed border-t border-white/[0.03] pt-4 bg-[#0a0c10]/20">
+                {f.a}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -413,35 +693,43 @@ function FAQ() {
 
 function Footer() {
   return (
-    <footer className="border-t border-border bg-card/60 px-6 py-12">
-      <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 md:flex-row">
+    <footer className="border-t border-white/5 bg-[#090a0e] px-6 py-12 text-center text-xs text-muted-foreground">
+      <div className="mx-auto flex max-w-[1100px] flex-col items-center justify-between gap-4 sm:flex-row">
         <div className="flex items-center gap-2">
-          <span className="font-display text-xl">LearnX</span>
+          <div className="grid h-6 w-6 place-items-center rounded-lg bg-primary/25 border border-primary/30">
+            <div
+              className="h-3 w-3 rotate-45 bg-primary"
+              style={{ clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)" }}
+            />
+          </div>
+          <span className="font-display text-lg font-bold tracking-tight text-white">LearnX</span>
         </div>
-        <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} LearnX. Made with too much coffee ☕</p>
+        <p>© {new Date().getFullYear()} LearnX. Made with way too much coffee ☕</p>
       </div>
     </footer>
   );
 }
 
 function Index() {
+  useEffect(() => {
+    // Smooth scrolling support
+    document.documentElement.style.scrollBehavior = "smooth";
+    return () => {
+      document.documentElement.style.scrollBehavior = "auto";
+    };
+  }, []);
+
   return (
-    <main className="overflow-hidden pt-4">
+    <main className="overflow-hidden pt-4 bg-background min-h-screen text-foreground selection:bg-primary/20 selection:text-white">
       <Nav />
       <Hero />
       <Upload />
       <PowerPrep />
       <Trusted />
       <HowItWorks />
-      <MakeItClick />
-      <NewNormal />
       <PowerTools />
-      <BestAI />
-      <Anywhere />
-      <Chaos />
       <Pricing />
       <CTA />
-      <Founder />
       <FAQ />
       <Footer />
     </main>

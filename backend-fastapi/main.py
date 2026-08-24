@@ -735,6 +735,9 @@ Standalone Query:"""
         # Remove duplicates
         page_numbers = list(set(page_numbers))
 
+        # Parse item_id as a list of IDs (supporting multiple comma-separated IDs)
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip()]
+
         cur = conn.cursor()
         matches = []
         
@@ -742,13 +745,14 @@ Standalone Query:"""
         if page_numbers:
             cur.execute(
                 """
-                SELECT chunk_text, page_number
-                FROM public.document_chunks
-                WHERE item_id = %s AND page_number = ANY(%s)
-                ORDER BY page_number ASC
+                SELECT c.chunk_text, c.page_number, s.title, s.file_name
+                FROM public.document_chunks c
+                JOIN public.study_items s ON c.item_id = s.id
+                WHERE c.item_id = ANY(%s) AND c.page_number = ANY(%s)
+                ORDER BY c.page_number ASC
                 LIMIT 5
                 """,
-                (payload.item_id, page_numbers)
+                (item_ids, page_numbers)
             )
             matches = cur.fetchall()
 
@@ -760,13 +764,14 @@ Standalone Query:"""
             # Try vector RAG search first (works for PDF items with document_chunks)
             cur.execute(
                 """
-                SELECT chunk_text, page_number
-                FROM public.document_chunks
-                WHERE item_id = %s
-                ORDER BY embedding <=> %s::vector
-                LIMIT 3
+                SELECT c.chunk_text, c.page_number, s.title, s.file_name
+                FROM public.document_chunks c
+                JOIN public.study_items s ON c.item_id = s.id
+                WHERE c.item_id = ANY(%s)
+                ORDER BY c.embedding <=> %s::vector
+                LIMIT 4
                 """,
-                (payload.item_id, query_embedding)
+                (item_ids, query_embedding)
             )
             matches = cur.fetchall()
 
@@ -775,29 +780,34 @@ Standalone Query:"""
         context = ""
         item_kind = "document"
         if matches:
-            context = "\n\n".join([f"[Page {m[1]}]: {m[0]}" for m in matches])
+            context_parts = []
+            for m in matches:
+                source_name = m[3] if m[3] else m[2]
+                context_parts.append(f"[Source: {source_name}, Page {m[1]}]: {m[0]}")
+            context = "\n\n".join(context_parts)
         else:
-            # Fetch the item's content and transcript directly
+            # Fetch content and transcript for all selected items
             cur.execute(
                 """
-                SELECT kind, content, transcript, youtube_url
+                SELECT kind, content, transcript, youtube_url, title, file_name
                 FROM public.study_items
-                WHERE id = %s
+                WHERE id = ANY(%s)
                 """,
-                (payload.item_id,)
+                (item_ids,)
             )
-            item_row = cur.fetchone()
-            if item_row:
-                item_kind = item_row[0] or "document"
-                item_content = item_row[1] or ""
-                item_transcript = item_row[2]  # JSONB field
-                youtube_url = item_row[3] or ""
-
-                # Build rich context from the item
-                context_parts = []
+            rows = cur.fetchall()
+            context_parts = []
+            for row in rows:
+                row_kind = row[0] or "document"
+                item_content = row[1] or ""
+                item_transcript = row[2]  # JSONB field
+                youtube_url = row[3] or ""
+                item_title = row[4] or "Resource"
+                item_file_name = row[5] or item_title
+                source_name = item_file_name if row_kind == "pdf" else item_title
 
                 if item_content and item_content.strip():
-                    context_parts.append(f"[Resource Summary]:\n{item_content[:3000]}")
+                    context_parts.append(f"[Source Summary for '{source_name}']:\n{item_content[:3000]}")
 
                 # Flatten transcript entries into readable text
                 if item_transcript:
@@ -807,21 +817,21 @@ Standalone Query:"""
                             item_transcript = _json.loads(item_transcript)
                         if isinstance(item_transcript, list) and item_transcript:
                             transcript_text = "\n".join(
-                                [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:40]]
+                                [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:30]]
                             )
-                            context_parts.append(f"[Video Transcript]:\n{transcript_text}")
+                            context_parts.append(f"[Video Transcript for '{source_name}']:\n{transcript_text}")
                     except Exception:
                         pass
 
                 if youtube_url:
-                    context_parts.append(f"[Source]: {youtube_url}")
+                    context_parts.append(f"[Source Link for '{source_name}']: {youtube_url}")
+                
+                item_kind = row_kind
 
-                if context_parts:
-                    context = "\n\n".join(context_parts)
-                else:
-                    context = "No content was stored for this item."
+            if context_parts:
+                context = "\n\n".join(context_parts)
             else:
-                context = "Item not found in the database."
+                context = "No content was stored for the selected items."
 
         cur.close()
 
@@ -1046,19 +1056,55 @@ async def generate_podcast(payload: GenerationPayload):
         raise HTTPException(status_code=500, detail="Database connection failed")
     
     try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip()]
         cur = conn.cursor()
-        cur.execute("SELECT content, transcript FROM public.study_items WHERE id = %s", (payload.item_id,))
-        item_row = cur.fetchone()
-        if not item_row:
-            raise HTTPException(status_code=404, detail="Item not found")
         
-        content = item_row[0] or ""
-        transcript = item_row[1]
+        # Fetch matching items
+        cur.execute(
+            """
+            SELECT id, title, file_name, content, transcript, kind 
+            FROM public.study_items 
+            WHERE id = ANY(%s)
+            """, 
+            (item_ids,)
+        )
+        rows = cur.fetchall()
         
-        context_text = content
-        if transcript and isinstance(transcript, list) and len(transcript) > 0:
-            context_text += "\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:200]])
+        context_parts = []
+        for row in rows:
+            item_title = row[1] or "Resource"
+            item_file_name = row[2] or item_title
+            content = row[3] or ""
+            transcript = row[4]
+            kind = row[5] or "document"
+            source_name = item_file_name if kind == "pdf" else item_title
             
+            context_text = f"--- Source: {source_name} ---\n"
+            if content.strip():
+                context_text += f"[Summary content]:\n{content}\n"
+            if transcript and isinstance(transcript, list) and len(transcript) > 0:
+                context_text += "[Transcript summary]:\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:50]]) + "\n"
+            
+            # Fetch some vector chunks for this source if it's a PDF
+            if kind == "pdf":
+                cur.execute(
+                    """
+                    SELECT chunk_text, page_number 
+                    FROM public.document_chunks 
+                    WHERE item_id = %s 
+                    LIMIT 15
+                    """, 
+                    (row[0],)
+                )
+                chunks = cur.fetchall()
+                if chunks:
+                    context_text += "[Detailed sections]:\n" + "\n".join([f"(Page {c[1]}): {c[0]}" for c in chunks]) + "\n"
+            
+            context_parts.append(context_text)
+            
+        cur.close()
+        
+        context_text = "\n\n".join(context_parts)
         if not context_text.strip():
             context_text = "There is no text context available for this document to generate a podcast."
             
@@ -1192,25 +1238,57 @@ async def generate_briefing(payload: GenerationPayload):
         raise HTTPException(status_code=500, detail="Database connection failed")
     
     try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip()]
         cur = conn.cursor()
-        cur.execute("SELECT content, transcript FROM public.study_items WHERE id = %s", (payload.item_id,))
-        item_row = cur.fetchone()
-        if not item_row:
-            raise HTTPException(status_code=404, detail="Item not found")
         
-        content = item_row[0] or ""
-        transcript = item_row[1]
+        # Fetch matching items
+        cur.execute(
+            """
+            SELECT id, title, file_name, content, transcript, kind 
+            FROM public.study_items 
+            WHERE id = ANY(%s)
+            """, 
+            (item_ids,)
+        )
+        rows = cur.fetchall()
         
-        context_text = content
-        if transcript and isinstance(transcript, list) and len(transcript) > 0:
-            context_text += "\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:200]])
+        context_parts = []
+        for row in rows:
+            item_title = row[1] or "Resource"
+            item_file_name = row[2] or item_title
+            content = row[3] or ""
+            transcript = row[4]
+            kind = row[5] or "document"
+            source_name = item_file_name if kind == "pdf" else item_title
             
-        cur.execute("SELECT chunk_text FROM public.document_chunks WHERE item_id = %s LIMIT 30", (payload.item_id,))
-        chunks = cur.fetchall()
-        if chunks:
-            context_text += "\n" + "\n".join([c[0] for c in chunks])
+            context_text = f"--- Source: {source_name} ---\n"
+            if content.strip():
+                context_text += f"[Summary content]:\n{content}\n"
+            if transcript and isinstance(transcript, list) and len(transcript) > 0:
+                context_text += "[Transcript summary]:\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:50]]) + "\n"
+            
+            # Fetch some vector chunks for this source if it's a PDF
+            if kind == "pdf":
+                cur.execute(
+                    """
+                    SELECT chunk_text, page_number 
+                    FROM public.document_chunks 
+                    WHERE item_id = %s 
+                    LIMIT 15
+                    """, 
+                    (row[0],)
+                )
+                chunks = cur.fetchall()
+                if chunks:
+                    context_text += "[Detailed sections]:\n" + "\n".join([f"(Page {c[1]}): {c[0]}" for c in chunks]) + "\n"
+            
+            context_parts.append(context_text)
             
         cur.close()
+        
+        context_text = "\n\n".join(context_parts)
+        if not context_text.strip():
+            context_text = "There is no text context available to generate a briefing document."
         
         prompt = f"""You are an expert Briefing Document creator.
 Based on the following document context, generate a beautiful, highly structured Markdown briefing document.
