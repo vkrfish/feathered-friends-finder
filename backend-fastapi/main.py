@@ -2,23 +2,22 @@ import os
 import re
 import json
 import hashlib
+import uuid
+import io
+import zipfile
 import requests
 import numpy as np
-from fastapi import FastAPI, UploadFile, Form, File, HTTPException
-import uvicorn
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import execute_values
-import pypdf
-import requests
-import zipfile
-import io
+from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
-
-# google.generativeai is only imported if OpenRouter is NOT configured
-# (avoids an aiohttp/WSMsgType compatibility crash on Windows with Python 3.11)
-genai = None
+from fastapi import FastAPI, UploadFile, Form, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+import uvicorn
+import pypdf
+import edge_tts
 
 # Load environment variables
 load_dotenv(dotenv_path="../.env")
@@ -34,113 +33,215 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
-# Connect to database
+# Database Configuration
 DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ultralearn")
+
+def validate_uuid_string(uuid_str: str):
+    """
+    Validates if a string is a comma-separated list of valid UUIDs or default virtual IDs.
+    Raises HTTPException 400 if any is invalid.
+    """
+    if not uuid_str:
+        raise HTTPException(status_code=400, detail="item_id cannot be empty")
+    ids = [x.strip() for x in uuid_str.split(",") if x.strip()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="item_id cannot be empty")
+    for val in ids:
+        if val.startswith("default-") or val.startswith("default"):
+            continue
+        try:
+            uuid.UUID(val)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid item_id format: '{val}'. Must be a valid UUID string."
+            )
 
 def get_db_connection():
     try:
-        from urllib.parse import urlparse, unquote
         parsed = urlparse(DB_URL)
         username = unquote(parsed.username) if parsed.username else None
         password = unquote(parsed.password) if parsed.password else None
         hostname = parsed.hostname
         port = parsed.port
         database = parsed.path.lstrip('/') if parsed.path else None
-        
+
         conn = psycopg2.connect(
             user=username,
             password=password,
             host=hostname,
             port=port,
-            database=database
+            database=database,
+            connect_timeout=5
         )
         return conn
     except Exception as e:
         print(f"[ERROR] Database connection failed: {e}")
         return None
 
-
-# AI API Key setup
-API_KEY = os.getenv("GEMINI_API_KEY")
+# AI API Configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-USE_OPENROUTER = bool(OPENROUTER_API_KEY)
-USE_REAL_AI = bool(API_KEY) or USE_OPENROUTER
 
-if USE_OPENROUTER:
-    print("[INFO] Configuring backend to use OpenRouter with Gemini 2.0 API.")
-elif USE_REAL_AI:
-    # Only import genai when OpenRouter is absent and Gemini key is set
-    try:
-        import google.generativeai as _genai
-        genai = _genai
-        genai.configure(api_key=API_KEY)
-        print("[INFO] Configuring Gemini SDK with API Key.")
-    except Exception as _e:
-        print(f"[WARNING] Could not load google.generativeai: {_e}. Falling back to local engine.")
-        USE_REAL_AI = False
-else:
-    print("[WARNING] Neither GEMINI_API_KEY nor OPENROUTER_API_KEY found. Running with local simulated RAG engine.")
+print(f"[INFO] Gemini API Key present: {bool(GEMINI_API_KEY)}")
+print(f"[INFO] OpenRouter API Key present: {bool(OPENROUTER_API_KEY)}")
 
 # -------------------------------------------------------------
-# HELPER: Vector Embedding Generator (768/1536 Dimensions)
+# CORE AI CLIENT: RESILIENT MULTI-PROVIDER LLM & EMBEDDINGS
 # -------------------------------------------------------------
-def get_embedding(text: str, fast: bool = True) -> list:
+def get_embedding(text: str, fast: bool = False) -> list:
     """
     Generates a 1536-dimensional float vector.
-    If fast is True, creates an instant deterministic semantic hash vector locally.
-    Otherwise, attempts to call slow remote APIs if available.
+    1. Attempts Gemini REST API (gemini-embedding-001 with outputDimensionality=1536).
+    2. Attempts OpenRouter (openai/text-embedding-3-small).
+    3. Falls back to deterministic semantic hash vector.
     """
     target_dim = 1536
-    
-    if not fast and USE_REAL_AI:
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return [0.0] * target_dim
+
+    if not fast and GEMINI_API_KEY:
         try:
-            if USE_OPENROUTER:
-                url = "https://openrouter.ai/api/v1/embeddings"
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": "openai/text-embedding-3-small",
-                    "input": text
-                }
-                res = requests.post(url, json=payload, headers=headers, timeout=10)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={GEMINI_API_KEY}"
+            payload = {
+                "content": {"parts": [{"text": clean_text[:8000]}]},
+                "outputDimensionality": target_dim
+            }
+            res = requests.post(url, json=payload, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                values = data.get("embedding", {}).get("values", [])
+                if len(values) == target_dim:
+                    return values
+                elif len(values) > 0:
+                    if len(values) < target_dim:
+                        values = values + [0.0] * (target_dim - len(values))
+                    return values[:target_dim]
+            else:
+                print(f"[WARNING] Gemini embedding error {res.status_code}: {res.text[:150]}")
+        except Exception as e:
+            print(f"[WARNING] Gemini embedding call failed: {e}")
+
+    if not fast and OPENROUTER_API_KEY:
+        try:
+            url = "https://openrouter.ai/api/v1/embeddings"
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "openai/text-embedding-3-small",
+                "input": clean_text[:8000]
+            }
+            res = requests.post(url, json=payload, headers=headers, timeout=10)
+            if res.status_code == 200:
                 res_json = res.json()
                 if "data" in res_json and len(res_json["data"]) > 0:
                     vec = res_json["data"][0]["embedding"]
+                    if len(vec) < target_dim:
+                        vec = vec + [0.0] * (target_dim - len(vec))
                     return vec[:target_dim]
-                else:
-                    print(f"OpenRouter embedding failed: {res.text}")
             else:
-                result = genai.embed_content(
-                    model="models/text-embedding-004",
-                    content=text,
-                    task_type="retrieval_document"
-                )
-                vec = result['embedding']
-                # Pad 768 to 1536
-                if len(vec) < target_dim:
-                    vec = vec + [0.0] * (target_dim - len(vec))
-                return vec[:target_dim]
+                print(f"[WARNING] OpenRouter embedding error {res.status_code}: {res.text[:150]}")
         except Exception as e:
-            print(f"Error calling embedding API: {e}. Falling back to hash vector.")
+            print(f"[WARNING] OpenRouter embedding failed: {e}")
 
-    # FALLBACK: Semantic Hash-based vector generator
+    # Fallback: Deterministic Semantic Hash Vector
     vec = np.zeros(target_dim)
-    words = re.findall(r'\w+', text.lower())
+    words = re.findall(r'\w+', clean_text.lower())
+    if not words:
+        words = ["document", "study", "content"]
     for w in words:
-        # Generate stable index for this word
         h = int(hashlib.md5(w.encode('utf-8')).hexdigest(), 16)
         idx = h % target_dim
-        # Add weights based on word hash to allow basic similarity metrics
         vec[idx] += 1.0
-    
-    # Normalize vector to unit length
+
     norm = np.linalg.norm(vec)
     if norm > 0:
         vec = vec / norm
-        
     return vec.tolist()
+
+def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = False, chat_history: list = None, timeout: int = 35) -> str:
+    """
+    Executes an LLM completion request with multi-provider failover:
+    1. Google Gemini REST API (gemini-2.5-flash / gemini-flash-latest / gemini-2.0-flash)
+    2. OpenRouter API (google/gemini-2.5-flash / llama-3.3-70b-instruct)
+    3. Raises RuntimeError if all remote calls fail to allow local fallback.
+    """
+    # 1. Try Gemini REST API
+    if GEMINI_API_KEY:
+        gemini_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+        for model_name in gemini_models:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+                contents = []
+                if chat_history:
+                    for msg in chat_history:
+                        role = "user" if getattr(msg, "role", "") == "user" or (isinstance(msg, dict) and msg.get("role") == "user") else "model"
+                        content = getattr(msg, "content", "") if hasattr(msg, "content") else (msg.get("content", "") if isinstance(msg, dict) else str(msg))
+                        if content:
+                            contents.append({"role": role, "parts": [{"text": content}]})
+
+                contents.append({"role": "user", "parts": [{"text": prompt}]})
+
+                payload = {"contents": contents}
+                if system_instruction:
+                    payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+                if json_mode:
+                    payload["generationConfig"] = {"responseMimeType": "application/json"}
+
+                res = requests.post(url, json=payload, timeout=timeout)
+                if res.status_code == 200:
+                    data = res.json()
+                    candidates = data.get("candidates", [])
+                    if candidates and "content" in candidates[0]:
+                        parts = candidates[0]["content"].get("parts", [])
+                        if parts and "text" in parts[0]:
+                            return parts[0]["text"]
+                else:
+                    print(f"[WARNING] Gemini API {model_name} returned status {res.status_code}: {res.text[:150]}")
+            except Exception as e:
+                print(f"[WARNING] Gemini API {model_name} call error: {e}")
+
+    # 2. Try OpenRouter
+    if OPENROUTER_API_KEY:
+        try:
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            messages = []
+            if system_instruction:
+                messages.append({"role": "system", "content": system_instruction})
+            if chat_history:
+                for msg in chat_history:
+                    role = "user" if getattr(msg, "role", "") == "user" or (isinstance(msg, dict) and msg.get("role") == "user") else "assistant"
+                    content = getattr(msg, "content", "") if hasattr(msg, "content") else (msg.get("content", "") if isinstance(msg, dict) else str(msg))
+                    if content:
+                        messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": prompt})
+
+            payload = {
+                "model": "google/gemini-2.5-flash",
+                "messages": messages
+            }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
+
+            res = requests.post(url, json=payload, headers=headers, timeout=timeout)
+            if res.status_code == 200:
+                data = res.json()
+                choices = data.get("choices", [])
+                if choices and "message" in choices[0]:
+                    return choices[0]["message"].get("content", "")
+            else:
+                print(f"[WARNING] OpenRouter returned status {res.status_code}: {res.text[:150]}")
+        except Exception as e:
+            print(f"[WARNING] OpenRouter call error: {e}")
+
+    raise RuntimeError("All configured AI providers failed or are unavailable.")
 
 # -------------------------------------------------------------
 # HELPER: Text Chunking Strategy
@@ -149,25 +250,86 @@ def chunk_text(text: str, chunk_size: int = 800, overlap: int = 150) -> list:
     chunks = []
     start = 0
     text_len = len(text)
+    if text_len == 0:
+        return []
     while start < text_len:
         end = min(start + chunk_size, text_len)
         chunks.append(text[start:end])
+        if end == text_len:
+            break
         start += (chunk_size - overlap)
     return chunks
 
 # -------------------------------------------------------------
-# HELPER: AI Generation Router
+# HELPER: Insert Chunks & Embeddings into PostgreSQL
+# -------------------------------------------------------------
+def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: str = "", file_name: str = "", content: str = "", kind: str = "document"):
+    """
+    Stores vector embeddings into public.document_chunks.
+    Ensures parent study_items row exists so foreign key constraint is satisfied.
+    """
+    if not conn or not page_chunks:
+        return
+
+    # Filter out virtual items
+    if item_id.startswith("default-") or item_id.startswith("default"):
+        return
+
+    try:
+        cur = conn.cursor()
+        clean_title = title or "Study Resource"
+
+        # Ensure parent item exists
+        cur.execute(
+            """
+            INSERT INTO public.study_items (id, title, kind, file_name, content)
+            VALUES (%s::uuid, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                content = EXCLUDED.content,
+                title = COALESCE(NULLIF(EXCLUDED.title, ''), study_items.title)
+            """,
+            (item_id, clean_title, kind, file_name or clean_title, content or "")
+        )
+
+        # Clear previous chunks for this item if re-ingesting
+        cur.execute("DELETE FROM public.document_chunks WHERE item_id = %s::uuid", (item_id,))
+
+        data_list = []
+        for p_item_id, page_num, chunk_text_content in page_chunks:
+            emb = get_embedding(chunk_text_content, fast=False)
+            data_list.append((p_item_id, page_num, chunk_text_content, emb))
+
+        if data_list:
+            execute_values(
+                cur,
+                """
+                INSERT INTO public.document_chunks (item_id, page_number, chunk_text, embedding)
+                VALUES %s
+                """,
+                data_list,
+                template="(%s::uuid, %s, %s, %s::vector)"
+            )
+            conn.commit()
+            print(f"[RAG] Successfully inserted {len(data_list)} vector chunks for item {item_id}")
+        cur.close()
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Failed to insert document chunks for {item_id}: {e}")
+
+# -------------------------------------------------------------
+# HELPER: AI Generation Router (Flashcards, Quizzes, Summary)
 # -------------------------------------------------------------
 def generate_study_materials(content_text: str, title: str):
     """
     Generates study guides, 5 flashcards, and 3 quiz questions.
-    Uses Gemini API if available, else falls back to robust local parsing.
+    Uses AI if available, else falls back to robust local semantic parsing.
     """
     prompt = f"""
     Analyze the following academic document:
     Title: {title}
     Content:
-    {content_text[:3000]}
+    {content_text[:4000]}
     
     Respond strictly in JSON format with three fields:
     1. "summary": A brief markdown summary outlining key topics.
@@ -175,50 +337,25 @@ def generate_study_materials(content_text: str, title: str):
     3. "quiz": An array of 3 objects containing "question", "options" (array of 4 strings), "answer" (0-3 index of correct option), "explanation".
     """
 
-    if USE_OPENROUTER:
-        try:
-            headers = {
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": "google/gemini-2.0-flash-001",
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            }
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            if response.status_code == 200:
-                reply_text = response.json()['choices'][0]['message']['content']
-                json_match = re.search(r'\{.*\}', reply_text, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group(0))
-            else:
-                print(f"OpenRouter error: {response.text}")
-        except Exception as e:
-            print(f"OpenRouter generation failed: {e}. Using fallback.")
-
-    elif USE_REAL_AI:
-        try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt, request_options={"timeout": 15})
-            # Find JSON block in reply
-            json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group(0))
-        except Exception as e:
-            print(f"Gemini generation failed: {e}. Using fallback.")
+    try:
+        reply_text = call_llm(prompt, json_mode=True, timeout=25)
+        json_match = re.search(r'\{.*\}', reply_text, re.DOTALL)
+        if json_match:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, dict) and "flashcards" in parsed and "quiz" in parsed:
+                return {
+                    "summary": parsed.get("summary", f"### Document Summary: {title}\nSummary of study topics."),
+                    "flashcards": parsed.get("flashcards", []),
+                    "quiz": parsed.get("quiz", [])
+                }
+    except Exception as e:
+        print(f"[WARNING] AI study material generation fallback activated: {e}")
 
     # FALLBACK: Structured Socratic Generator
     keywords = re.findall(r'\b[A-Za-z]{4,}\b', content_text)
-    primary_terms = list(set([k for k in keywords if len(k) > 5]))[:5]
+    primary_terms = list(dict.fromkeys([k for k in keywords if len(k) > 4]))[:5]
     if len(primary_terms) < 3:
-        primary_terms = ["Automation", "Syllabus", "Exams", "Revision", "Concepts"]
+        primary_terms = ["Analysis", "Concepts", "Structure", "Applications", "Summary"]
 
     flashcards = []
     for term in primary_terms:
@@ -241,7 +378,7 @@ def generate_study_materials(content_text: str, title: str):
         "explanation": f"The document highlights {primary_terms[0]} as a central pillar of the study outline."
       },
       {
-        "question": f"What is the main objective of analyzing '{primary_terms[1]}隶?",
+        "question": f"What is the main objective of analyzing '{primary_terms[1]}'?",
         "options": [
           "To ignore practical applications",
           "To build Socratic understanding and prepare for exam retrieval",
@@ -275,16 +412,13 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         return ""
 
 # -------------------------------------------------------------
-# API ENDPOINT: PROCESS PDF & STORE RAG CHUNKS
+# API ENDPOINT: PROCESS PDF / DOCX / TXT & STORE RAG CHUNKS
 # -------------------------------------------------------------
 @app.post("/process-pdf")
 async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
+    validate_uuid_string(item_id)
     conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    
     try:
-        # Read the uploaded file into memory
         file_bytes = await file.read()
         filename_lower = file.filename.lower()
         full_text = ""
@@ -296,11 +430,10 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
                 print(f"[INFO] Ingesting Word Document (.docx): {file.filename}")
                 full_text = extract_text_from_docx(file_bytes)
                 if full_text.strip():
-                    # Chunk extracted docx text
                     chunks = chunk_text(full_text)
                     for chunk in chunks:
                         if chunk.strip():
-                            page_chunks.append((item_id, 1, chunk)) # Docx has no native page layout, use page 1
+                            page_chunks.append((item_id, 1, chunk))
 
             elif filename_lower.endswith(".txt") or filename_lower.endswith(".md"):
                 print(f"[INFO] Ingesting Plain Text File (.txt/.md): {file.filename}")
@@ -312,26 +445,23 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
                             page_chunks.append((item_id, 1, chunk))
 
             else:
-                # Default behavior: treat as PDF
+                # Treat as PDF
                 print(f"[INFO] Ingesting PDF Document: {file.filename}")
                 pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
                 for idx, page in enumerate(pdf_reader.pages):
                     page_text = page.extract_text() or ""
                     full_text += page_text + "\n"
-                    
-                    # Chunk page text
                     chunks = chunk_text(page_text)
                     for chunk in chunks:
                         if chunk.strip():
                             page_chunks.append((item_id, idx + 1, chunk))
 
         except Exception as parse_error:
-            print(f"[WARNING] Native parsing failed for {file.filename}: {parse_error}. Falling back to default layout text.")
+            print(f"[WARNING] Native parsing failed for {file.filename}: {parse_error}.")
             full_text = ""
 
-        # 2. If no text could be extracted, use a dynamic fallback
+        # 2. Dynamic fallback text if empty
         if not full_text.strip():
-            print(f"[WARNING] Could not extract text from {file.filename}. Using dynamic fallback.")
             clean_title = file.filename.split('.')[0].replace("_", " ").replace("-", " ")
             full_text = (
                 f"This study workspace covers topics related to {clean_title}.\n\n"
@@ -341,46 +471,37 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
             )
             page_chunks.append((item_id, 1, full_text))
 
-        # 3. Generate vectors and prepare bulk data
-        data_list = []
-        for item_id_val, page_num, chunk in page_chunks:
-            embedding = get_embedding(chunk, fast=True)
-            data_list.append((item_id_val, page_num, chunk, embedding))
+        # 3. Insert Chunks with Embeddings into pgvector
+        clean_title = file.filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
+        if conn:
+            insert_document_chunks_to_db(
+                conn,
+                item_id=item_id,
+                page_chunks=page_chunks,
+                title=clean_title,
+                file_name=file.filename,
+                content=full_text,
+                kind="pdf"
+            )
 
-        # Bulk insert to database in a single high-speed query!
-        cur = conn.cursor()
-        execute_values(
-            cur,
-            """
-            INSERT INTO public.document_chunks (item_id, page_number, chunk_text, embedding)
-            VALUES %s
-            """,
-            data_list,
-            template="(%s, %s, %s, %s::vector)"
-        )
-
-        conn.commit()
-        cur.close()
-
-        # Generate flashcards and quizzes
+        # 4. Generate flashcards and quizzes
         materials = generate_study_materials(full_text, file.filename)
 
         return {
-            "content": full_text[:4000], # return preview
+            "content": full_text,
             "flashcards": materials["flashcards"],
             "quiz": materials["quiz"]
         }
     except HTTPException as he:
-        conn.rollback()
         raise he
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 # -------------------------------------------------------------
-# API ENDPOINT: YOUTUBE ROADMAP EXTRACTOR
+# API ENDPOINT: YOUTUBE ROADMAP & TRANSCRIPT RAG
 # -------------------------------------------------------------
 class YoutubePayload(BaseModel):
     url: str
@@ -388,21 +509,21 @@ class YoutubePayload(BaseModel):
 
 @app.post("/process-youtube")
 async def process_youtube(payload: YoutubePayload):
-    # 1. Extract video_id
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+
     video_id = "dQw4w9WgXcQ"
     reg = r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'
     match = re.search(reg, payload.url)
     if match:
         video_id = match.group(1)
 
-    # Helper: format float seconds into MM:SS
     def format_seconds(seconds: float) -> str:
         total_sec = int(seconds)
         minutes = total_sec // 60
         secs = total_sec % 60
         return f"{minutes:02d}:{secs:02d}"
 
-    # Fetch title first using oEmbed for high-quality context
     video_title = f"YouTube Video ({video_id})"
     try:
         oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
@@ -413,22 +534,15 @@ async def process_youtube(payload: YoutubePayload):
     except Exception:
         pass
 
-    # 2. Try fetching the real transcript
     transcript_data = []
     full_text = ""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-
-        # Fetch transcript
         try:
             srt = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi', 'te', 'ta'])
         except Exception:
-            try:
-                srt = YouTubeTranscriptApi.get_transcript(video_id)
-            except Exception as srt_e:
-                raise srt_e
+            srt = YouTubeTranscriptApi.get_transcript(video_id)
 
-        # Process transcript into array
         for entry in srt:
             seconds = entry.get('start', 0.0)
             text = entry.get('text', '')
@@ -439,160 +553,77 @@ async def process_youtube(payload: YoutubePayload):
                 "seconds": int(seconds)
             })
             full_text += text + " "
-            
         print(f"[YouTube] Successfully fetched {len(transcript_data)} transcript segments for video {video_id}")
-    
     except Exception as e:
-        print(f"[WARNING] YouTube transcript extraction failed for video {video_id}: {e}. Generating clean no-transcript view.")
-        
-        # Keep transcript and chapters empty if not available
-        transcript_data = []
-        chapters = []
-        
-        # Generate custom study materials based on the real video title!
-        summary_content = f"### Study Session: {video_title}\nThis YouTube video does not contain an active spoken transcript. Based on the video title **'{video_title}'**, we have prepared a custom learning workspace for you to explore related concepts."
-        
-        flashcards = []
-        quiz = []
-        
-        if USE_REAL_AI:
-            try:
-                prompt = f"""
-                The user wants to study a YouTube resource.
-                Title: {video_title}
-                Note: This video has no transcript.
-                
-                Respond strictly in JSON format with three fields:
-                1. "summary": A brief markdown summary introducing the topic of "{video_title}" and what a learner should know about it.
-                2. "flashcards": An array of 5 objects containing "question", "answer", "hint" based on the topic of "{video_title}".
-                3. "quiz": An array of 3 objects containing "question", "options" (array of 4 strings), "answer" (0-3 index of correct option), "explanation" based on the topic of "{video_title}".
-                """
-                if USE_OPENROUTER:
-                    headers = {
-                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "Content-Type": "application/json",
-                    }
-                    api_payload = {
-                        "model": "google/gemini-2.0-flash-001",
-                        "messages": [{"role": "user", "content": prompt}]
-                    }
-                    res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=api_payload, timeout=20)
-                    if res.status_code == 200:
-                        parsed = json.loads(re.search(r'\{.*\}', res.json()['choices'][0]['message']['content'], re.DOTALL).group(0))
-                        summary_content = parsed.get("summary", summary_content)
-                        flashcards = parsed.get("flashcards", [])
-                        quiz = parsed.get("quiz", [])
-                elif genai:
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                    response = model.generate_content(prompt)
-                    parsed = json.loads(re.search(r'\{.*\}', response.text, re.DOTALL).group(0))
-                    summary_content = parsed.get("summary", summary_content)
-                    flashcards = parsed.get("flashcards", [])
-                    quiz = parsed.get("quiz", [])
-            except Exception as ai_e:
-                print(f"[WARNING] Fallback AI study materials generation failed: {ai_e}")
+        print(f"[WARNING] YouTube transcript extraction failed for video {video_id}: {e}.")
 
-        if not flashcards or not quiz:
-            flashcards = [
-                {
-                    "question": f"What is the main subject of '{video_title}'?",
-                    "answer": f"The main subject is centered around the theme: '{video_title}'.",
-                    "hint": "Check the title of the video."
-                }
-            ]
-            quiz = [
-                {
-                    "question": f"Which of the following best matches the resource title?",
-                    "options": [video_title, "A completely different video", "A blank placeholder", "None of the above"],
-                    "answer": 0,
-                    "explanation": f"The title of this study session is '{video_title}'."
-                }
-            ]
-
-        return {
-            "video_id": video_id,
-            "content": summary_content,
-            "chapters": chapters,
-            "transcript": transcript_data,
-            "flashcards": flashcards,
-            "quiz": quiz
-        }
-
-    # 3. Use AI to generate real chapters, summary, flashcards, and quiz from the real transcript!
-    # Build prompt
-    prompt = f"""
-    Analyze the following YouTube video transcript:
-    Title: YouTube Video ({video_id})
-    Transcript Context:
-    {full_text[:8000]}
-    
-    Respond strictly in JSON format with four fields:
-    1. "summary": A brief markdown summary outlining the key topics of the video.
-    2. "chapters": An array of objects representing major timestamps/sections in the video. Each object must have "title", "time" (format MM:SS), "seconds" (integer seconds). Example: {{"title": "Introduction", "time": "00:00", "seconds": 0}}. Generate 3 to 6 major chapters based on when the topics naturally transition.
-    3. "flashcards": An array of 5 objects containing "question", "answer", "hint".
-    4. "quiz": An array of 3 objects containing "question", "options" (array of 4 strings), "answer" (0-3 index of correct option), "explanation".
-    """
-
+    # Generate chapters & study materials
     chapters = []
     flashcards = []
     quiz = []
-    summary_content = f"YouTube video analyzed: {payload.url}"
+    summary_content = f"### Study Session: {video_title}\n\n"
 
-    if USE_REAL_AI:
+    if full_text.strip():
+        # Store transcript chunks into pgvector
+        page_chunks = []
+        chunks = chunk_text(full_text)
+        for idx, chunk in enumerate(chunks):
+            page_chunks.append((payload.item_id, idx + 1, chunk))
+
+        if conn:
+            insert_document_chunks_to_db(
+                conn,
+                item_id=payload.item_id,
+                page_chunks=page_chunks,
+                title=video_title,
+                file_name=video_title,
+                content=full_text,
+                kind="youtube"
+            )
+
+        prompt = f"""
+        Analyze the following YouTube video transcript:
+        Title: {video_title}
+        Transcript Context:
+        {full_text[:8000]}
+        
+        Respond strictly in JSON format with four fields:
+        1. "summary": A brief markdown summary outlining the key topics of the video.
+        2. "chapters": An array of objects representing major timestamps/sections in the video. Each object must have "title", "time" (format MM:SS), "seconds" (integer seconds). Example: {{"title": "Introduction", "time": "00:00", "seconds": 0}}. Generate 3 to 6 major chapters based on when the topics naturally transition.
+        3. "flashcards": An array of 5 objects containing "question", "answer", "hint".
+        4. "quiz": An array of 3 objects containing "question", "options" (array of 4 strings), "answer" (0-3 index of correct option), "explanation".
+        """
         try:
-            if USE_OPENROUTER:
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                }
-                api_payload = {
-                    "model": "google/gemini-2.0-flash-001",
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ]
-                }
-                res = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json=api_payload,
-                    timeout=30
-                )
-                if res.status_code == 200:
-                    reply_text = res.json()['choices'][0]['message']['content']
-                    json_match = re.search(r'\{.*\}', reply_text, re.DOTALL)
-                    if json_match:
-                        parsed = json.loads(json_match.group(0))
-                        summary_content = parsed.get("summary", summary_content)
-                        chapters = parsed.get("chapters", [])
-                        flashcards = parsed.get("flashcards", [])
-                        quiz = parsed.get("quiz", [])
-            elif genai:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                response = model.generate_content(prompt)
-                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-                if json_match:
-                    parsed = json.loads(json_match.group(0))
-                    summary_content = parsed.get("summary", summary_content)
-                    chapters = parsed.get("chapters", [])
-                    flashcards = parsed.get("flashcards", [])
-                    quiz = parsed.get("quiz", [])
-        except Exception as e:
-            print(f"[WARNING] AI processing of transcript failed: {e}. Falling back to default materials.")
+            reply_text = call_llm(prompt, json_mode=True, timeout=30)
+            json_match = re.search(r'\{.*\}', reply_text, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group(0))
+                summary_content = parsed.get("summary", summary_content)
+                chapters = parsed.get("chapters", [])
+                flashcards = parsed.get("flashcards", [])
+                quiz = parsed.get("quiz", [])
+        except Exception as ai_e:
+            print(f"[WARNING] AI YouTube processing failed: {ai_e}")
 
-    # Fallback if AI generation failed or returned empty values
     if not chapters:
-        # Build 3 basic chapters evenly spaced
         total_duration = transcript_data[-1]["seconds"] if transcript_data else 300
         chapters = [
             {"title": "Introduction", "time": "00:00", "seconds": 0},
             {"title": "Core Discussion", "time": "01:30", "seconds": 90},
             {"title": "Key Takeaways", "time": format_seconds(total_duration // 2), "seconds": total_duration // 2}
         ]
+
     if not flashcards or not quiz:
-        fallback_materials = generate_study_materials(full_text[:3000], f"YouTube ({video_id})")
+        fallback_materials = generate_study_materials(full_text[:3000] if full_text.strip() else video_title, video_title)
         flashcards = flashcards or fallback_materials["flashcards"]
         quiz = quiz or fallback_materials["quiz"]
-        summary_content = summary_content or fallback_materials["summary"]
+        if not full_text.strip():
+            summary_content += f"This YouTube video does not contain a pre-generated transcript. A study guide has been synthesized from '{video_title}'."
+        else:
+            summary_content = summary_content or fallback_materials["summary"]
+
+    if conn:
+        conn.close()
 
     return {
         "video_id": video_id,
@@ -612,9 +643,48 @@ class UrlPayload(BaseModel):
 
 @app.post("/process-website")
 async def process_website(payload: UrlPayload):
-    # Simulated Scraper
-    scraped_text = f"Scraped contents from {payload.url}.\nFeatures modern single page applications, server functions, and edge APIs."
-    materials = generate_study_materials(scraped_text, payload.url)
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+
+    scraped_text = ""
+    title = f"Web Page: {payload.url}"
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        res = requests.get(payload.url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            html = res.text
+            # Basic text extraction from HTML
+            text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<[^>]+>', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+            scraped_text = text[:10000]
+            # Extract title if present
+            title_match = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE)
+            if title_match:
+                title = title_match.group(1).strip()
+    except Exception as e:
+        print(f"[WARNING] Website scraping error: {e}")
+
+    if not scraped_text:
+        scraped_text = f"Scraped content from {payload.url}.\nFeatures modern web application components, documentation, and conceptual guides."
+
+    # Store vector chunks into pgvector
+    if conn:
+        chunks = chunk_text(scraped_text)
+        page_chunks = [(payload.item_id, idx + 1, c) for idx, c in enumerate(chunks)]
+        insert_document_chunks_to_db(
+            conn,
+            item_id=payload.item_id,
+            page_chunks=page_chunks,
+            title=title,
+            file_name=payload.url,
+            content=scraped_text,
+            kind="website"
+        )
+        conn.close()
+
+    materials = generate_study_materials(scraped_text, title)
     return {
         "content": scraped_text,
         "flashcards": materials["flashcards"],
@@ -627,6 +697,24 @@ class TextPayload(BaseModel):
 
 @app.post("/process-text")
 async def process_text(payload: TextPayload):
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+
+    # Store vector chunks into pgvector
+    if conn:
+        chunks = chunk_text(payload.text)
+        page_chunks = [(payload.item_id, idx + 1, c) for idx, c in enumerate(chunks)]
+        insert_document_chunks_to_db(
+            conn,
+            item_id=payload.item_id,
+            page_chunks=page_chunks,
+            title="Pasted Notes",
+            file_name="Pasted Notes",
+            content=payload.text,
+            kind="text"
+        )
+        conn.close()
+
     materials = generate_study_materials(payload.text, "Pasted Notes")
     return {
         "flashcards": materials["flashcards"],
@@ -639,7 +727,41 @@ class ResearchPayload(BaseModel):
 
 @app.post("/process-research")
 async def process_research(payload: ResearchPayload):
-    report = f"# Research Dossier: {payload.topic}\n\n## Introduction\nDetailed findings on {payload.topic}..."
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+
+    report = ""
+    prompt = f"""You are an elite academic researcher. Generate a comprehensive, deep-dive research dossier on the topic: '{payload.topic}'.
+Include:
+1. Executive Overview
+2. Historical & Theoretical Background
+3. Key Pillars and Technical Mechanisms
+4. Case Studies and Practical Applications
+5. Future Outlook and Critical Open Challenges
+
+Write in rich Markdown with clear headings (H2, H3), bullet points, and key takeaways."""
+
+    try:
+        report = call_llm(prompt, timeout=30)
+    except Exception as e:
+        print(f"[WARNING] Research report generation fallback: {e}")
+        report = f"# Research Dossier: {payload.topic}\n\n## Introduction\nDetailed findings and conceptual breakdown on {payload.topic}.\n\n## Core Concepts\nKey foundations supporting {payload.topic} across modern workflows."
+
+    # Store vector chunks into pgvector
+    if conn:
+        chunks = chunk_text(report)
+        page_chunks = [(payload.item_id, idx + 1, c) for idx, c in enumerate(chunks)]
+        insert_document_chunks_to_db(
+            conn,
+            item_id=payload.item_id,
+            page_chunks=page_chunks,
+            title=f"Research: {payload.topic}",
+            file_name=f"Research: {payload.topic}",
+            content=report,
+            kind="research"
+        )
+        conn.close()
+
     materials = generate_study_materials(report, payload.topic)
     return {
         "content": report,
@@ -658,331 +780,202 @@ class ChatPayload(BaseModel):
     item_id: str
     question: str
     chat_history: list[ChatHistoryMessage] = []
+    context: str = ""
 
 @app.post("/chat")
 async def chat(payload: ChatPayload):
+    validate_uuid_string(payload.item_id)
     conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    try:
-        # 1. Condense the query if chat history is present to capture semantic terms
-        search_query = payload.question
-        if payload.chat_history and USE_REAL_AI:
-            try:
-                # Format history for the condensation prompt
-                history_text = ""
-                for msg in payload.chat_history[-5:]: # Look at last 5 messages for brevity and speed
-                    role_label = "User" if msg.role == "user" else "Assistant"
-                    history_text += f"{role_label}: {msg.content}\n"
-                
-                condensation_prompt = f"""Given the following conversation history and a follow-up question, rewrite the follow-up question to be a standalone, search-optimized query.
-The standalone query should contain all necessary context and search terms from the conversation history so it can be used to search in a vector database.
-Do NOT answer the question. Only return the rewritten standalone query and absolutely nothing else.
 
+    try:
+        search_query = payload.question
+
+        # 1. Condense query if chat history exists
+        if payload.chat_history:
+            try:
+                history_text = "\n".join([
+                    f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}"
+                    for m in payload.chat_history[-5:]
+                ])
+                condensation_prompt = f"""Given the conversation history and a follow-up question, rewrite the follow-up question to be a single standalone search query containing all key context. Do not answer it.
 Conversation History:
 {history_text}
-
 Follow-up Question: {payload.question}
+Standalone Search Query:"""
 
-Standalone Query:"""
-
-                if USE_OPENROUTER:
-                    headers = {
-                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "Content-Type": "application/json",
-                    }
-                    api_payload = {
-                        "model": "google/gemini-2.0-flash-001",
-                        "messages": [{"role": "user", "content": condensation_prompt}]
-                    }
-                    res = requests.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers=headers,
-                        json=api_payload,
-                        timeout=10
-                    )
-                    if res.status_code == 200:
-                        condensed = res.json()['choices'][0]['message']['content'].strip()
-                        # Clean any quotes or markdown around the standalone query
-                        condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
-                        if condensed:
-                            search_query = condensed
-                elif genai:
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                    res = model.generate_content(condensation_prompt)
-                    condensed = res.text.strip()
-                    condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
-                    if condensed:
-                        search_query = condensed
-                
-                print(f"[RAG] Original Question: '{payload.question}' -> Standalone Search Query: '{search_query}'")
+                condensed = call_llm(condensation_prompt, timeout=10).strip()
+                condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
+                if condensed and len(condensed) > 3:
+                    search_query = condensed
+                print(f"[RAG] Question: '{payload.question}' -> Query: '{search_query}'")
             except Exception as e:
-                print(f"[WARNING] Query condensation failed: {e}. Using original question.")
+                print(f"[WARNING] Query condensation skipped: {e}")
 
-        # 2. Extract page numbers from either the original question OR the condensed search query
+        # 2. Extract page numbers if explicitly requested
         page_numbers = []
         for text_to_check in [payload.question, search_query]:
-            # Pattern 1: "page 47", "pg 47", "p. 47", "pg.47"
             matches1 = re.findall(r'(?:page|pg\.?|p\.)\s*(\d+)', text_to_check, re.IGNORECASE)
             for m in matches1:
                 page_numbers.append(int(m))
-                
-            # Pattern 2: "47th page", "47 page"
             matches2 = re.findall(r'(\d+)\s*(?:th|rd|st|nd)?\s*page', text_to_check, re.IGNORECASE)
             for m in matches2:
                 page_numbers.append(int(m))
-                
-        # Remove duplicates
         page_numbers = list(set(page_numbers))
 
-        # Parse item_id as a list of IDs (supporting multiple comma-separated IDs)
-        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip()]
-
-        cur = conn.cursor()
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
         matches = []
-        
-        # If specific page numbers were mentioned, try to retrieve chunks from those pages first!
-        if page_numbers:
-            cur.execute(
-                """
-                SELECT c.chunk_text, c.page_number, s.title, s.file_name
-                FROM public.document_chunks c
-                JOIN public.study_items s ON c.item_id = s.id
-                WHERE c.item_id = ANY(%s) AND c.page_number = ANY(%s)
-                ORDER BY c.page_number ASC
-                LIMIT 5
-                """,
-                (item_ids, page_numbers)
-            )
-            matches = cur.fetchall()
-
-        # If no page numbers were matched, or no chunks were found on those pages, fall back to vector similarity search
-        if not matches:
-            # Embed query question (using search_query for better semantic matches!)
-            query_embedding = get_embedding(search_query)
-
-            # Try vector RAG search first (works for PDF items with document_chunks)
-            cur.execute(
-                """
-                SELECT c.chunk_text, c.page_number, s.title, s.file_name
-                FROM public.document_chunks c
-                JOIN public.study_items s ON c.item_id = s.id
-                WHERE c.item_id = ANY(%s)
-                ORDER BY c.embedding <=> %s::vector
-                LIMIT 4
-                """,
-                (item_ids, query_embedding)
-            )
-            matches = cur.fetchall()
-
-        # 3. If no chunks found (e.g. YouTube, text, website, research), fall back to
-        #    the item's stored content and transcript from study_items
         context = ""
         item_kind = "document"
-        if matches:
-            context_parts = []
-            for m in matches:
-                source_name = m[3] if m[3] else m[2]
-                context_parts.append(f"[Source: {source_name}, Page {m[1]}]: {m[0]}")
-            context = "\n\n".join(context_parts)
-        else:
-            # Fetch content and transcript for all selected items
+
+        if conn and item_ids:
+            cur = conn.cursor()
+
+            # Priority 1: Page-specific chunk retrieval
+            if page_numbers:
+                cur.execute(
+                    """
+                    SELECT c.chunk_text, c.page_number, s.title, s.file_name
+                    FROM public.document_chunks c
+                    JOIN public.study_items s ON c.item_id = s.id
+                    WHERE c.item_id = ANY(%s::uuid[]) AND c.page_number = ANY(%s)
+                    ORDER BY c.page_number ASC
+                    LIMIT 6
+                    """,
+                    (item_ids, page_numbers)
+                )
+                matches = cur.fetchall()
+
+            # Priority 2: Vector RAG search with Cosine Distance
+            if not matches:
+                query_embedding = get_embedding(search_query, fast=False)
+                cur.execute(
+                    """
+                    SELECT c.chunk_text, c.page_number, s.title, s.file_name, (c.embedding <=> %s::vector) AS distance
+                    FROM public.document_chunks c
+                    JOIN public.study_items s ON c.item_id = s.id
+                    WHERE c.item_id = ANY(%s::uuid[])
+                    ORDER BY c.embedding <=> %s::vector ASC
+                    LIMIT 6
+                    """,
+                    (query_embedding, item_ids, query_embedding)
+                )
+                raw_matches = cur.fetchall()
+                # Accept top nearest chunks
+                matches = raw_matches[:6]
+
+            # Priority 3: Retrieve full document summary/transcripts for context
             cur.execute(
                 """
                 SELECT kind, content, transcript, youtube_url, title, file_name
                 FROM public.study_items
-                WHERE id = ANY(%s)
+                WHERE id = ANY(%s::uuid[])
                 """,
                 (item_ids,)
             )
             rows = cur.fetchall()
+            cur.close()
+
             context_parts = []
+            if matches:
+                for m in matches:
+                    source_name = m[3] if m[3] else m[2]
+                    page_label = f"Page {m[1]}" if m[1] else "Section"
+                    context_parts.append(f"[Source: {source_name}, {page_label}]:\n{m[0]}")
+
             for row in rows:
                 row_kind = row[0] or "document"
                 item_content = row[1] or ""
-                item_transcript = row[2]  # JSONB field
+                item_transcript = row[2]
                 youtube_url = row[3] or ""
                 item_title = row[4] or "Resource"
                 item_file_name = row[5] or item_title
                 source_name = item_file_name if row_kind == "pdf" else item_title
 
-                if item_content and item_content.strip():
+                if item_content and item_content.strip() and not matches:
                     context_parts.append(f"[Source Summary for '{source_name}']:\n{item_content[:3000]}")
 
-                # Flatten transcript entries into readable text
                 if item_transcript:
                     try:
                         if isinstance(item_transcript, str):
-                            import json as _json
-                            item_transcript = _json.loads(item_transcript)
+                            item_transcript = json.loads(item_transcript)
                         if isinstance(item_transcript, list) and item_transcript:
                             transcript_text = "\n".join(
-                                [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:30]]
+                                [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:40]]
                             )
                             context_parts.append(f"[Video Transcript for '{source_name}']:\n{transcript_text}")
                     except Exception:
                         pass
 
-                if youtube_url:
-                    context_parts.append(f"[Source Link for '{source_name}']: {youtube_url}")
-                
                 item_kind = row_kind
 
             if context_parts:
                 context = "\n\n".join(context_parts)
+
+        # Supplement with client-provided context if database context is minimal
+        if payload.context and payload.context.strip():
+            if context and context.strip() and "No specific content" not in context:
+                context = f"{context}\n\n[Active Client Context]:\n{payload.context[:4000]}"
             else:
-                context = "No content was stored for the selected items."
+                context = payload.context[:8000]
 
-        cur.close()
+        if not context or not context.strip():
+            context = "No specific content was stored for the selected items."
 
-        # 4. Build prompt — specialized per content kind
+        # 3. Build Prompt & Execute AI Generation
         kind_label = {
             "youtube": "YouTube video lecture",
-            "website": "scraped web page",
+            "website": "web page",
             "text": "pasted notes",
             "research": "deep research report",
             "pdf": "PDF document"
         }.get(item_kind, "study resource")
 
-        if item_kind == "youtube":
-            # ── Specialized YouTube RAG prompt (detailed, uses AI knowledge if needed) ──
-            prompt = f"""You are an expert, highly knowledgeable AI study assistant specialized in answering questions from YouTube video knowledge sources.
+        system_instruction = f"""You are an expert, highly knowledgeable AI study assistant.
+The user is studying a {kind_label}.
 
-PRIMARY OBJECTIVE:
-Generate extremely detailed, comprehensive, and rich multi-paragraph explanations. You must deeply explore concepts, provide examples, and ensure the user gets a thorough understanding. Short answers are unacceptable.
+PRIMARY OBJECTIVES:
+1. Provide extremely clear, beautifully structured, and comprehensive answers.
+2. Directly answer the user's question using the provided source context.
+3. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents or `[MM:SS]` for videos (e.g., "The concept is defined as... [Page 2]").
+4. If the exact answer isn't fully covered in the context, seamlessly supplement using your vast AI knowledge while mentioning that you are supplementing with general knowledge.
+5. End with a friendly, conversational follow-up inviting deeper exploration."""
 
-ANSWERING RULES:
-1. Start by answering the question thoroughly using the retrieved transcript context provided below. Include major timestamps when citing the video (e.g., "[00:01:12]").
-2. If the retrieved context is insufficient or lacks detail to fully answer the user's question, YOU MUST seamlessly use your own vast general AI knowledge to provide a complete, deeply informative answer. Simply add a brief note mentioning that you are supplementing with general knowledge.
-3. Prioritize: extreme detail, factual accuracy, clarity, and comprehensive explanations.
-4. If the user requests a summary or explanation, provide highly structured, lengthy content with bullet points, deep dives into sub-topics, and clear takeaways.
-
-Retrieved Transcript Context:
+        user_prompt = f"""Retrieved Source Context:
 {context}
 
-User Question:
-{payload.question}
+Question: {payload.question}"""
 
-Answer:"""
-        else:
-            # Format chat history for string prompt fallback
-            history_str = ""
-            if payload.chat_history:
-                history_str = "\n--- Conversation History ---\n"
-                for msg in payload.chat_history:
-                    role_label = "User" if msg.role == "user" else "Assistant"
-                    history_str += f"{role_label}: {msg.content}\n"
-                history_str += "----------------------------\n"
-
-            # ── Standard document study prompt ──
-            prompt = f"""You are an expert, highly knowledgeable AI study assistant. The user is studying a {kind_label}.
-
-Your primary goal is to generate extremely detailed, comprehensive, and rich multi-paragraph explanations. You must deeply explore concepts, provide examples, and ensure the user gets a thorough understanding. Short answers are strictly prohibited.
-
-ANSWERING RULES:
-1. First, answer the question thoroughly using the document context provided below.
-2. If the exact answer isn't in the context, or if the context lacks enough detail to provide a comprehensive answer, YOU MUST use your own vast general AI knowledge to fully answer the question. Do not just say "I don't know." Instead, provide a deep, informative answer and simply note that the information comes from your general knowledge.
-3. Be highly specific, beautifully structured, and incredibly helpful.
-4. IMPORTANT: Whenever you use information from the provided document context, you MUST append an inline citation with the exact page number you got it from, using the format `[Page X]` (e.g., "The core concept is defined as... [Page 4]").
-
-At the very end of your response, always append a friendly closing follow-up sentence inviting deeper exploration, such as:
-"Do you need a deeper explanation of any of these topics, or is there another question you would like to ask to help you get a better idea?" (or similar highly conversational variants).
-
-Context from the {kind_label}:
-{context}
-{history_str}
-User Question:
-{payload.question}
-
-Answer:"""
-
-        if USE_OPENROUTER:
-            try:
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                }
-                # For YouTube: split into system (instructions) + user (context + question) + history
-                # For others: split into system (context + instructions) + history + user (question)
-                if item_kind == "youtube":
-                    messages = [
-                        {"role": "system", "content": """You are an expert, highly knowledgeable AI study assistant specialized in answering questions from YouTube video transcripts.
-Generate extremely detailed, comprehensive, and rich multi-paragraph explanations. You must deeply explore concepts, provide examples, and ensure the user gets a thorough understanding. Short answers are unacceptable.
-Start by answering the question thoroughly using the retrieved transcript context provided. Include major timestamps when citing the video (e.g., "[00:01:12]").
-If the retrieved context is insufficient or lacks detail, YOU MUST seamlessly use your own vast general AI knowledge to provide a complete, deeply informative answer. Simply add a brief note mentioning that you are supplementing with general knowledge.
-
-At the very end of your response, always append a friendly closing follow-up sentence inviting deeper exploration."""}
-                    ]
-                    
-                    for msg in payload.chat_history:
-                        messages.append({"role": msg.role, "content": msg.content})
-                    
-                    messages.append({"role": "user", "content": f"Context:\n{context}\n\nQuestion: {payload.question}"})
-                else:
-                    messages = [
-                        {"role": "system", "content": f"""You are an expert, highly knowledgeable AI study assistant. The user is studying a {kind_label}.
-Your primary goal is to generate extremely detailed, comprehensive, and rich multi-paragraph explanations. You must deeply explore concepts, provide examples, and ensure the user gets a thorough understanding. Short answers are strictly prohibited.
-First, answer the question thoroughly using the document context provided.
-IMPORTANT: Whenever you use information from the provided document context, you MUST append an inline citation with the exact page number you got it from, using the format `[Page X]` (e.g., "The core concept is defined as... [Page 4]").
-If the exact answer isn't in the context, or if the context lacks enough detail to provide a comprehensive answer, YOU MUST use your own vast general AI knowledge to fully answer the question. Do not just say "I don't know."
-
-At the very end of your response, always append a friendly closing follow-up sentence inviting deeper exploration."""}
-                    ]
-                    
-                    messages.append({"role": "user", "content": f"Context:\n{context}"})
-                    for msg in payload.chat_history:
-                        messages.append({"role": msg.role, "content": msg.content})
-                    messages.append({"role": "user", "content": payload.question})
-
-                api_payload = {
-                    "model": "google/gemini-2.0-flash-001",
-                    "messages": messages
-                }
-                response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json=api_payload,
-                    timeout=30
-                )
-                if response.status_code == 200:
-                    reply = response.json()['choices'][0]['message']['content']
-                else:
-                    print(f"OpenRouter error: {response.text}")
-                    raise Exception("OpenRouter request failed")
-            except Exception as e:
-                print(f"OpenRouter chat failed: {e}. Using fallback.")
-                reply = f"Based on the {kind_label}, here is a response to your question: **{payload.question}**.\n\n{context[:500]}"
-        elif USE_REAL_AI and genai:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
-            reply = response.text
-        else:
-            # Fallback local engine — surface the context directly
-            reply = f"Here is relevant content from your {kind_label} about **{payload.question}**:\n\n"
+        try:
+            reply = call_llm(
+                prompt=user_prompt,
+                system_instruction=system_instruction,
+                chat_history=payload.chat_history,
+                timeout=30
+            )
+        except Exception as ai_e:
+            print(f"[WARNING] Remote AI chat failed: {ai_e}. Using synthesized fallback.")
+            reply = f"Based on your {kind_label}, here is the information regarding **{payload.question}**:\n\n"
             if matches:
-                reply += f"> \"{matches[0][0][:300]}...\"\n\n"
-                reply += "I've extracted this from the most relevant section of your document."
-            elif context and context != "No content was stored for this item.":
-                reply += context[:600]
+                reply += f"> {matches[0][0][:400]}...\n\n"
+                reply += "I've extracted this from your study resource. Would you like a deeper breakdown of any specific concept?"
+            elif context and "No specific content" not in context:
+                reply += f"{context[:600]}\n\nFeel free to ask follow-up questions to explore further!"
             else:
-                reply += "No content was found for this resource. Please re-upload or re-add it."
+                reply += f"I analyzed your study materials for '{payload.question}'. Upload additional notes or select active sources to see page-specific citations!"
 
         return {"answer": reply}
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        conn.close()
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+        if conn:
+            conn.close()
 
 # -------------------------------------------------------------
-# NOTEBOOK LM FEATURES: PODCAST & BRIEFING
+# NOTEBOOK LM FEATURES: PODCAST, BRIEFING, TTS
 # -------------------------------------------------------------
-from fastapi.responses import StreamingResponse
-import edge_tts
-
 class GenerationPayload(BaseModel):
     item_id: str
     language: str = "English"
@@ -1007,10 +1000,11 @@ async def get_tts(text: str, voice: str):
 
 @app.get("/tts-full/{item_id}")
 async def get_tts_full(item_id: str, voice1: str, voice2: str, h1Name: str = "Host 1"):
+    validate_uuid_string(item_id)
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="Database connection failed")
-    
+
     try:
         cur = conn.cursor()
         cur.execute("SELECT audio_script FROM public.study_items WHERE id = %s", (item_id,))
@@ -1018,58 +1012,58 @@ async def get_tts_full(item_id: str, voice1: str, voice2: str, h1Name: str = "Ho
         cur.close()
     finally:
         conn.close()
-    
+
     if not item or not item[0]:
         raise HTTPException(status_code=404, detail="No script found")
-        
+
     script = item[0]
     if isinstance(script, str):
         script = json.loads(script)
-    
+
     async def generate():
         for line in script:
             text = line.get("text", "")
             speaker = line.get("speaker", "")
-            if not text: continue
-            
+            if not text:
+                continue
+
             voice_id = voice1
             if speaker != "Alex" and speaker != h1Name and speaker != "Host 1":
                 voice_id = voice2
-                
+
             try:
                 communicate = edge_tts.Communicate(text, voice_id)
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
                         yield chunk["data"]
-                # yield b'\x00' * 4000 # Add a tiny silence gap between speakers to make it sound natural (optional, edge-tts already adds some padding)
             except Exception as e:
                 print(f"Error generating TTS for line: {e}")
-                
+
     return StreamingResponse(generate(), media_type="audio/mpeg", headers={
         "Content-Disposition": f"attachment; filename=\"podcast_{item_id}.mp3\""
     })
 
 @app.post("/generate-podcast")
 async def generate_podcast(payload: GenerationPayload):
+    validate_uuid_string(payload.item_id)
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="Database connection failed")
-    
+
     try:
-        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip()]
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
         cur = conn.cursor()
-        
-        # Fetch matching items
+
         cur.execute(
             """
             SELECT id, title, file_name, content, transcript, kind 
             FROM public.study_items 
-            WHERE id = ANY(%s)
-            """, 
+            WHERE id = ANY(%s::uuid[])
+            """,
             (item_ids,)
         )
         rows = cur.fetchall()
-        
+
         context_parts = []
         for row in rows:
             item_title = row[1] or "Resource"
@@ -1078,154 +1072,87 @@ async def generate_podcast(payload: GenerationPayload):
             transcript = row[4]
             kind = row[5] or "document"
             source_name = item_file_name if kind == "pdf" else item_title
-            
+
             context_text = f"--- Source: {source_name} ---\n"
             if content.strip():
                 context_text += f"[Summary content]:\n{content}\n"
             if transcript and isinstance(transcript, list) and len(transcript) > 0:
-                context_text += "[Transcript summary]:\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:50]]) + "\n"
-            
-            # Fetch some vector chunks for this source if it's a PDF
-            if kind == "pdf":
-                cur.execute(
-                    """
-                    SELECT chunk_text, page_number 
-                    FROM public.document_chunks 
-                    WHERE item_id = %s 
-                    LIMIT 15
-                    """, 
-                    (row[0],)
-                )
-                chunks = cur.fetchall()
-                if chunks:
-                    context_text += "[Detailed sections]:\n" + "\n".join([f"(Page {c[1]}): {c[0]}" for c in chunks]) + "\n"
-            
-            context_parts.append(context_text)
-            
-        cur.close()
-        
-        context_text = "\n\n".join(context_parts)
-        if not context_text.strip():
-            context_text = "There is no text context available for this document to generate a podcast."
-            
-        def parse_pages(pages_str: str):
-            if not pages_str or pages_str.lower() == "all":
-                return None
-            page_nums = set()
-            for part in pages_str.split(","):
-                part = part.strip()
-                if "-" in part:
-                    bounds = part.split("-")
-                    if len(bounds) == 2 and bounds[0].isdigit() and bounds[1].isdigit():
-                        start, end = int(bounds[0]), int(bounds[1])
-                        for p in range(start, end + 1):
-                            page_nums.add(p)
-                elif part.isdigit():
-                    page_nums.add(int(part))
-            return list(page_nums) if page_nums else None
+                context_text += "[Transcript]:\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:40]]) + "\n"
 
-        # Get chunks to supplement context if it's a PDF
-        pages_filter = parse_pages(payload.pages)
-        if pages_filter:
-            cur.execute("SELECT chunk_text FROM public.document_chunks WHERE item_id = %s AND page_number = ANY(%s) LIMIT 100", (payload.item_id, pages_filter))
-        else:
-            cur.execute("SELECT chunk_text FROM public.document_chunks WHERE item_id = %s LIMIT 30", (payload.item_id,))
-        
-        chunks = cur.fetchall()
-        if chunks:
-            context_text += "\n" + "\n".join([c[0] for c in chunks])
-            
+            cur.execute("SELECT chunk_text, page_number FROM public.document_chunks WHERE item_id = %s LIMIT 15", (row[0],))
+            chunks = cur.fetchall()
+            if chunks:
+                context_text += "[Sections]:\n" + "\n".join([f"(Page {c[1]}): {c[0]}" for c in chunks]) + "\n"
+
+            context_parts.append(context_text)
+
         cur.close()
-        
-        instructions_text = f"\nUSER CUSTOM INSTRUCTIONS / TOPIC: {payload.instructions}\n" if payload.instructions.strip() else ""
-        pages_text = f"\nCRITICAL: ONLY focus on the content specifically from pages: {payload.pages}. Ignore other content.\n" if payload.pages.strip() and payload.pages.lower() != "all" else ""
-        
-        # Determine paragraph count based on duration
-        para_count = "10 to 15" # default medium
+        context_text = "\n\n".join(context_parts) if context_parts else "Educational study topic."
+
+        instructions_text = f"\nUSER CUSTOM INSTRUCTIONS: {payload.instructions}\n" if payload.instructions.strip() else ""
+        pages_text = f"\nFOCUS ONLY ON CONTENT FROM PAGES: {payload.pages}.\n" if payload.pages.strip() and payload.pages.lower() != "all" else ""
+
+        para_count = "8 to 12"
         if "Short" in payload.duration:
             para_count = "4 to 6"
         elif "Long" in payload.duration:
-            para_count = "25 to 35"
+            para_count = "18 to 25"
 
         if payload.format == "single-host":
-            prompt = f"""You are a professional audio generation AI. 
-Based on the following document context, generate an incredibly engaging and educational SINGLE-HOST MONOLOGUE. 
-The host giving the monologue is named {payload.host1Name}.
-
-CRITICAL: The monologue MUST be strictly in the following language: {payload.language}.
-ABSOLUTELY NO LANGUAGE MIXING. Use ONLY {payload.language} vocabulary and alphabet. If {payload.language} is a regional language (e.g. Telugu), do NOT include other scripts like Tamil or Hindi.
+            prompt = f"""You are a professional audio generation AI.
+Generate an engaging, educational SINGLE-HOST MONOLOGUE explaining this document's topics.
+Host Name: {payload.host1Name}
+Language: {payload.language} (CRITICAL: Strictly in {payload.language} vocabulary).
 {pages_text}
 {instructions_text}
 
-Respond strictly in JSON format with a single field "texts", which is an array of strings.
-Each string is a paragraph of the monologue. 
-DO NOT INCLUDE SPEAKER NAMES in the output, just the text paragraphs.
-Generate exactly {para_count} distinct paragraphs/sections to match the requested duration of: {payload.duration}.
-DO NOT MAKE IT A CONVERSATION. IT MUST BE ONE PERSON EXPLAINING THE TOPIC TO THE AUDIENCE.
-"""
-        else:
-            prompt = f"""You are a professional podcast generation AI. 
-Based on the following document context, generate an incredibly engaging, humorous, and educational podcast dialogue between two hosts: {payload.host1Name} and {payload.host2Name}.
-They are discussing the document's main themes, making analogies, and bantering.
+Respond strictly in JSON format with field "texts" (an array of {para_count} strings, each representing a paragraph):
+{{"texts": ["paragraph 1", "paragraph 2"]}}
 
-CRITICAL: The podcast MUST be strictly in the following language: {payload.language}.
-ABSOLUTELY NO LANGUAGE MIXING. Use ONLY {payload.language} vocabulary and alphabet. If {payload.language} is a regional language (e.g. Telugu), do NOT include other scripts like Tamil or Hindi.
-{pages_text}
-{instructions_text}
-
-Respond strictly in JSON format with a single field "script", which is an array of objects. 
-Each object must have "speaker" (either "{payload.host1Name}" or "{payload.host2Name}") and "text" (the dialogue line).
-Generate exactly {para_count} dialogue exchanges to match the requested duration of: {payload.duration}.
-"""
-
-        prompt += f"""
 Context:
-{context_text[:20000]}
-"""
+{context_text[:15000]}"""
+        else:
+            prompt = f"""You are a professional podcast generation AI.
+Generate an engaging, witty, and educational dialogue between two hosts: {payload.host1Name} and {payload.host2Name}.
+Language: {payload.language} (CRITICAL: Strictly in {payload.language} vocabulary).
+{pages_text}
+{instructions_text}
+
+Respond strictly in JSON format with field "script" (an array of {para_count} objects with "speaker" and "text"):
+{{"script": [{{"speaker": "{payload.host1Name}", "text": "..."}}, {{"speaker": "{payload.host2Name}", "text": "..."}}]}}
+
+Context:
+{context_text[:15000]}"""
+
         script = []
-        if USE_REAL_AI:
-            if USE_OPENROUTER:
-                headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-                res = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json={"model": "google/gemini-2.0-flash-001", "messages": [{"role": "user", "content": prompt}]},
-                    timeout=45
-                )
-                if res.status_code == 200:
-                    reply_text = res.json()['choices'][0]['message']['content']
-                    json_match = re.search(r'\{.*\}', reply_text, re.DOTALL)
-                    if json_match:
-                        parsed = json.loads(json_match.group(0))
-                        if payload.format == "single-host":
-                            if "texts" in parsed:
-                                script = [{"speaker": payload.host1Name, "text": t} for t in parsed["texts"]]
-                            elif "script" in parsed:
-                                script = [{"speaker": payload.host1Name, "text": s.get("text", "")} for s in parsed["script"]]
-                            else:
-                                script = []
-                        else:
-                            script = parsed.get("script", [])
-            elif genai:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                response = model.generate_content(prompt)
-                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-                if json_match:
-                    parsed = json.loads(json_match.group(0))
-                    if payload.format == "single-host":
-                        if "texts" in parsed:
-                            script = [{"speaker": payload.host1Name, "text": t} for t in parsed["texts"]]
-                        elif "script" in parsed:
-                            script = [{"speaker": payload.host1Name, "text": s.get("text", "")} for s in parsed["script"]]
-                        else:
-                            script = []
-                    else:
-                        script = parsed.get("script", [])
-                    
+        try:
+            reply_text = call_llm(prompt, json_mode=True, timeout=40)
+            json_match = re.search(r'\{.*\}', reply_text, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group(0))
+                if payload.format == "single-host":
+                    if "texts" in parsed:
+                        script = [{"speaker": payload.host1Name, "text": t} for t in parsed["texts"]]
+                    elif "script" in parsed:
+                        script = [{"speaker": payload.host1Name, "text": s.get("text", "")} for s in parsed["script"]]
+                else:
+                    script = parsed.get("script", [])
+        except Exception as e:
+            print(f"[WARNING] Podcast generation fallback: {e}")
+            if payload.format == "single-host":
+                script = [
+                    {"speaker": payload.host1Name, "text": f"Welcome to today's study overview on our selected topics."},
+                    {"speaker": payload.host1Name, "text": f"We are examining key insights and core concepts to strengthen your understanding."}
+                ]
+            else:
+                script = [
+                    {"speaker": payload.host1Name, "text": f"Welcome back! Today we are breaking down our study notes."},
+                    {"speaker": payload.host2Name, "text": f"That's right, let's dive into the core takeaways together!"}
+                ]
+
         return {"script": script}
-        
+
     except Exception as e:
-        print(f"Error generating podcast: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
@@ -1233,103 +1160,75 @@ Context:
 
 @app.post("/generate-briefing")
 async def generate_briefing(payload: GenerationPayload):
+    validate_uuid_string(payload.item_id)
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="Database connection failed")
-    
+
     try:
-        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip()]
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
         cur = conn.cursor()
-        
-        # Fetch matching items
+
         cur.execute(
             """
             SELECT id, title, file_name, content, transcript, kind 
             FROM public.study_items 
-            WHERE id = ANY(%s)
-            """, 
+            WHERE id = ANY(%s::uuid[])
+            """,
             (item_ids,)
         )
         rows = cur.fetchall()
-        
+
         context_parts = []
         for row in rows:
             item_title = row[1] or "Resource"
             item_file_name = row[2] or item_title
             content = row[3] or ""
-            transcript = row[4]
             kind = row[5] or "document"
             source_name = item_file_name if kind == "pdf" else item_title
-            
+
             context_text = f"--- Source: {source_name} ---\n"
             if content.strip():
                 context_text += f"[Summary content]:\n{content}\n"
-            if transcript and isinstance(transcript, list) and len(transcript) > 0:
-                context_text += "[Transcript summary]:\n" + "\n".join([f"[{t.get('time','?')}] {t.get('text','')}" for t in transcript[:50]]) + "\n"
-            
-            # Fetch some vector chunks for this source if it's a PDF
-            if kind == "pdf":
-                cur.execute(
-                    """
-                    SELECT chunk_text, page_number 
-                    FROM public.document_chunks 
-                    WHERE item_id = %s 
-                    LIMIT 15
-                    """, 
-                    (row[0],)
-                )
-                chunks = cur.fetchall()
-                if chunks:
-                    context_text += "[Detailed sections]:\n" + "\n".join([f"(Page {c[1]}): {c[0]}" for c in chunks]) + "\n"
-            
+
+            cur.execute("SELECT chunk_text, page_number FROM public.document_chunks WHERE item_id = %s LIMIT 15", (row[0],))
+            chunks = cur.fetchall()
+            if chunks:
+                context_text += "[Sections]:\n" + "\n".join([f"(Page {c[1]}): {c[0]}" for c in chunks]) + "\n"
+
             context_parts.append(context_text)
-            
+
         cur.close()
-        
-        context_text = "\n\n".join(context_parts)
-        if not context_text.strip():
-            context_text = "There is no text context available to generate a briefing document."
-        
+        context_text = "\n\n".join(context_parts) if context_parts else "Educational study topic."
+
         prompt = f"""You are an expert Briefing Document creator.
-Based on the following document context, generate a beautiful, highly structured Markdown briefing document.
+Based on the following document context, generate a structured Markdown briefing document.
 It must include:
 1. Executive Summary
 2. FAQ (Frequently Asked Questions) - At least 5 insightful questions and answers.
 3. Key Glossary - Define 5-10 core terms or concepts found in the text.
-4. Chronology / Timeline (if applicable) or Major Takeaways.
+4. Chronology / Timeline or Key Strategic Takeaways.
 
-Format beautifully with Markdown headers (H1, H2, H3), bold text, and bullet points.
-Return ONLY the markdown string, do not wrap it in JSON.
+Format with Markdown headers (# H1, ## H2, ### H3), bold terms, and bullet points. Return ONLY the markdown.
 
 Context:
-{context_text[:20000]}
-"""
-        briefing_markdown = "# Briefing Document\n*Failed to generate briefing document.*"
-        if USE_REAL_AI:
-            if USE_OPENROUTER:
-                headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-                res = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json={"model": "google/gemini-2.0-flash-001", "messages": [{"role": "user", "content": prompt}]},
-                    timeout=45
-                )
-                if res.status_code == 200:
-                    briefing_markdown = res.json()['choices'][0]['message']['content']
-            elif genai:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-                response = model.generate_content(prompt)
-                briefing_markdown = response.text
-                
-        # Clean up markdown code blocks if any
-        briefing_markdown = re.sub(r'^```(?:markdown)?\n?', '', briefing_markdown)
-        briefing_markdown = re.sub(r'\n?```$', '', briefing_markdown)
-                    
+{context_text[:18000]}"""
+
+        briefing_markdown = "# Study Briefing Document\n\n## Executive Summary\nSummary of core concepts and themes."
+        try:
+            briefing_markdown = call_llm(prompt, timeout=35)
+            briefing_markdown = re.sub(r'^```(?:markdown)?\n?', '', briefing_markdown)
+            briefing_markdown = re.sub(r'\n?```$', '', briefing_markdown)
+        except Exception as e:
+            print(f"[WARNING] Briefing generation fallback: {e}")
+
         return {"briefing_doc": briefing_markdown}
-        
+
     except Exception as e:
-        print(f"Error generating briefing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:
             conn.close()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

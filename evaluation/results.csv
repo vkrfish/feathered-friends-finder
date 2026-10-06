@@ -1,0 +1,4 @@
+System,Precision,Recall,F1,MRR,Accuracy (%),Faithfulness (%)
+LLM Only (No Retrieval),0.0,0.0,0.0,0.0,0.0,100.0
+BM25 Keyword Search,0.25,0.75,0.375,0.5312,30.0,100.0
+LearnX (Embeddings + pgvector),0.224,0.6719,0.3359,0.4844,35.0,100.0

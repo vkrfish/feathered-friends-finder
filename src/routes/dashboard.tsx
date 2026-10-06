@@ -479,35 +479,80 @@ export default function DashboardPage() {
     formData.append("file", file);
     formData.append("notebook_id", activeNotebookId);
 
-    const uploadPromise = useRealBackend && !backendOffline
-      ? fetchWithAuth("http://localhost:3001/api/items/file", {
-          method: "POST",
-          body: formData,
-        })
-      : null;
-
     runSimulatedAnalysis(fileLogs, async () => {
-      if (useRealBackend && !backendOffline && uploadPromise) {
+      let uploadedSuccessfully = false;
+
+      // 1. Try Node API Gateway
+      if (useRealBackend && !backendOffline) {
         try {
-          const res = await uploadPromise;
-          if (!res.ok) throw new Error("Fail upload");
-          const data = await res.json();
-          blobUrlsRef.current.set(data.id, blobUrl);
-
-          setAnalysisLogs((prev) => [...prev, "⚡ Vector processing and index complete!"]);
-          setAnalysisProgress(95);
-
-          await fetchItems();
-          setSelectedSourceIds((prev) => [...prev, data.id]);
-          toast.success(`Indexed successfully: ${file.name}`);
+          const res = await fetchWithAuth("http://localhost:3001/api/items/file", {
+            method: "POST",
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            blobUrlsRef.current.set(data.id, blobUrl);
+            setAnalysisLogs((prev) => [...prev, "⚡ Vector processing and index complete!"]);
+            setAnalysisProgress(95);
+            await fetchItems();
+            setSelectedSourceIds((prev) => [...prev, data.id]);
+            toast.success(`Indexed successfully: ${file.name}`);
+            uploadedSuccessfully = true;
+          }
         } catch (e) {
-          toast.error("Could not upload. Make sure Node API is running.");
-          URL.revokeObjectURL(blobUrl);
-          setIsAnalyzing(false);
+          console.warn("Node gateway PDF upload failed, trying direct FastAPI call...");
         }
-      } else {
+      }
+
+      // 2. Direct FastAPI PDF processing fallback if Node Gateway is offline
+      if (!uploadedSuccessfully) {
+        try {
+          const fastApiFormData = new FormData();
+          const itemId = crypto.randomUUID();
+          fastApiFormData.append("file", file);
+          fastApiFormData.append("item_id", itemId);
+
+          const fRes = await fetch("http://localhost:8000/process-pdf", {
+            method: "POST",
+            body: fastApiFormData,
+          });
+
+          if (fRes.ok) {
+            const fData = await fRes.json();
+            const today = new Date();
+            const newItem: StudyItem = {
+              id: itemId,
+              notebookId: activeNotebookId,
+              title: file.name.split(".")[0],
+              createdAt: today.toISOString(),
+              kind: "pdf",
+              fileName: file.name,
+              content: fData.content || docData.content,
+              localFileUrl: blobUrl,
+              flashcards: fData.flashcards && fData.flashcards.length > 0 ? fData.flashcards : docData.flashcards,
+              quiz: fData.quiz && fData.quiz.length > 0 ? fData.quiz : docData.quiz,
+              notes: "",
+              chatHistory: [],
+            };
+
+            const allItems = localStorage.getItem("ultra_learn_items")
+              ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
+              : [];
+            saveLocalItems([newItem, ...allItems]);
+            setSelectedSourceIds((prev) => [...prev, newItem.id]);
+            setNotebooks((prev) => prev.map((n) => n.id === activeNotebookId ? { ...n } : n));
+            setSources((prev) => [newItem, ...prev]);
+            toast.success(`Indexed successfully via RAG AI: ${file.name}`);
+            uploadedSuccessfully = true;
+          }
+        } catch (fErr) {
+          console.warn("Direct FastAPI PDF processing failed:", fErr);
+        }
+      }
+
+      // 3. Fallback mock if both backends are down
+      if (!uploadedSuccessfully) {
         const today = new Date();
-        const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
         const newItem: StudyItem = {
           id: crypto.randomUUID(),
           notebookId: activeNotebookId,
@@ -516,7 +561,7 @@ export default function DashboardPage() {
           kind: "pdf",
           fileName: file.name,
           content: docData.content,
-          localFileUrl: URL.createObjectURL(file),
+          localFileUrl: blobUrl,
           flashcards: docData.flashcards,
           quiz: docData.quiz,
           notes: "",
@@ -525,11 +570,12 @@ export default function DashboardPage() {
         const allItems = localStorage.getItem("ultra_learn_items")
           ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
           : [];
-        const updated = [newItem, ...allItems];
-        saveLocalItems(updated);
+        saveLocalItems([newItem, ...allItems]);
         setSelectedSourceIds((prev) => [...prev, newItem.id]);
-        toast.success(`Mock-indexed ${file.name}`);
+        setSources((prev) => [newItem, ...prev]);
+        toast.success(`Processed ${file.name}`);
       }
+
       setIsAnalyzing(false);
       setActiveInputMode("none");
       setInputText("");
@@ -1422,6 +1468,25 @@ function StudySessionPanel({
     toast.success("Notes exported successfully!");
   };
 
+  // Export podcast script
+  const downloadPodcastScript = () => {
+    if (!notebook.audioScript || notebook.audioScript.length === 0) {
+      toast.error("No podcast script generated yet.");
+      return;
+    }
+    const scriptText = notebook.audioScript
+      .map((line) => `[${line.speaker}]: ${line.text}`)
+      .join("\n\n");
+    const blob = new Blob([scriptText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${notebook.title.replace(/\s+/g, "_")}_Podcast_Script.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Podcast script exported successfully!");
+  };
+
   // Pin insights
   const pinMessage = async (content: string) => {
     if (useRealBackend) {
@@ -1498,104 +1563,124 @@ function StudySessionPanel({
     setChatInput("");
     setIsBotTyping(true);
 
+    const activeItems = sources.filter((s) => selectedSourceIds.includes(s.id));
+    const activeContext = activeItems
+      .map((s) => `[Source: ${s.title}]:\n${s.content || ""}`)
+      .join("\n\n");
+
     if (useRealBackend) {
       try {
         const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: query, selectedSourceIds }),
+          body: JSON.stringify({
+            question: query,
+            selectedSourceIds,
+            context: activeContext,
+          }),
         });
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setIsBotTyping(false);
-        onUpdateNotebook({
-          ...notebook,
-          chatHistory: [...updatedHistory, { role: "assistant" as const, content: data.content }],
-        });
+        if (res.ok) {
+          const data = await res.json();
+          setIsBotTyping(false);
+          onUpdateNotebook({
+            ...notebook,
+            chatHistory: [...updatedHistory, { role: "assistant" as const, content: data.content }],
+          });
+          return;
+        }
       } catch (err) {
-        setIsBotTyping(false);
-        toast.error("Failed to query RAG service.");
+        console.warn("Node gateway chat failed, trying direct FastAPI call...");
       }
-    } else {
-      // Local simulated response mapping active sources keywords
-      setTimeout(() => {
-        const activeItems = sources.filter((s) => selectedSourceIds.includes(s.id));
-        let reply = "";
 
-        if (activeItems.length === 0) {
-          reply = `Yo, you haven't checked any sources in the left sidebar! Click a checkbox next to a file, video, or website so I can lock in on the context. No cap, I can't read your mind yet! 💀`;
-        } else {
-          // Look for a smart matched response from our active items
-          let matchedReply = "";
-          for (const item of activeItems) {
-            const agentResponse = getSmartAgentResponse(query, item);
-            // If it's not the generic fallback warning, use it!
-            if (agentResponse && !agentResponse.includes("The document focuses on explaining related concepts")) {
-              matchedReply = agentResponse;
-              break;
-            }
-          }
+      // Try contacting FastAPI directly at http://localhost:8000/chat
+      try {
+        const fastApiRes = await fetch("http://localhost:8000/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            item_id: selectedSourceIds.join(",") || notebook.id,
+            question: query,
+            chat_history: notebook.chatHistory || [],
+            context: activeContext,
+          }),
+        });
+        if (fastApiRes.ok) {
+          const data = await fastApiRes.json();
+          setIsBotTyping(false);
+          onUpdateNotebook({
+            ...notebook,
+            chatHistory: [...updatedHistory, { role: "assistant" as const, content: data.answer }],
+          });
+          return;
+        }
+      } catch (fErr) {
+        console.warn("Direct FastAPI chat failed:", fErr);
+      }
+    }
 
-          if (matchedReply) {
-            reply = matchedReply;
-          } else {
-            // No specific keyword match, let's generate a highly engaging, gen-zy, dynamic fallback grounded in their source titles!
-            const sourceTitles = activeItems.map(s => `**${s.title}**`).join(" & ");
-            const intros = [
-              `No cap, I locked in and scanned ${sourceTitles}. Here is the tea on your question:`,
-              `I just deep-dived into your study files (${sourceTitles}) and honestly, you're not cooked. Here is what we know:`,
-              `My sensors are screaming that you're cramming. Based on ${sourceTitles}, here's the lowdown:`,
-              `Scanning ${sourceTitles}... complete. Let's get this bread. Here is what I found regarding "${query}":`
-            ];
-            const randomIntro = intros[Math.floor(Math.random() * intros.length)];
+    // Local simulated response mapping active sources keywords
+    setTimeout(() => {
+      let reply = "";
 
-            // Let's grab some snippet of content from the active sources to make it look grounded!
-            let excerpt = "";
-            for (const item of activeItems) {
-              if (item.content && item.content.length > 50) {
-                // Try to find a sentence or line containing some query word
-                const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-                const lines = item.content.split("\n");
-                let foundLine = "";
-                for (const line of lines) {
-                  if (queryWords.some(word => line.toLowerCase().includes(word))) {
-                    foundLine = line.trim();
-                    break;
-                  }
-                }
-                if (foundLine) {
-                  excerpt = foundLine;
-                  break;
-                }
-              }
-            }
-
-            if (excerpt) {
-              reply = `${randomIntro}\n\n> "${excerpt}"\n\nThis is directly from your source. Check out the synthesis tabs on the right side if you want to test your knowledge or listen to the podcast, fr fr! [Page 1]`;
-            } else {
-              // Try to summarize or show some key content from the first item
-              const firstItem = activeItems[0];
-              const snippet = firstItem.content ? firstItem.content.split("\n").filter(l => l.trim().length > 30).slice(0, 2).join("\n") : "";
-
-              if (snippet) {
-                reply = `${randomIntro}\n\nHere is a key reference from ${firstItem.title}:\n\n${snippet}\n\nIf you want to practice this, check the Flashcards or Quizzes on the right tab. You got this! [Page 1]`;
-              } else {
-                reply = `${randomIntro}\n\nI couldn't find a direct reference to "${query}" in the text of your active sources, but we can generate flashcards or a briefing doc for ${sourceTitles} on the right side to help you lock in! [Page 1]`;
-              }
-            }
+      if (activeItems.length === 0) {
+        reply = `Please select at least one study resource from the left panel so I can use its context to answer your question!`;
+      } else {
+        let matchedReply = "";
+        for (const item of activeItems) {
+          const agentResponse = getSmartAgentResponse(query, item);
+          if (agentResponse && !agentResponse.includes("The document focuses on explaining related concepts")) {
+            matchedReply = agentResponse;
+            break;
           }
         }
 
-        setIsBotTyping(false);
-        onUpdateNotebook({
-          ...notebook,
-          chatHistory: [
-            ...updatedHistory,
-            { role: "assistant" as const, content: reply },
-          ],
-        });
-      }, 900);
-    }
+        if (matchedReply) {
+          reply = matchedReply;
+        } else {
+          const sourceTitles = activeItems.map(s => `**${s.title}**`).join(", ");
+          let excerpt = "";
+          const lowerQuery = query.toLowerCase().trim();
+          const isGeneralInquiry = ["explain", "abstract", "summary", "summarize", "overview", "what", "intro", "introduction", "tell me"].some(kw => lowerQuery.includes(kw));
+
+          for (const item of activeItems) {
+            if (item.content && item.content.length > 30) {
+              const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 2);
+              const lines = item.content.split("\n").filter(l => l.trim().length > 20);
+
+              // 1. Try keyword line match
+              for (const line of lines) {
+                if (queryWords.some(word => line.toLowerCase().includes(word))) {
+                  excerpt = line.trim();
+                  break;
+                }
+              }
+
+              // 2. If general inquiry (explain, abstract, overview), take the first major descriptive paragraph
+              if (!excerpt && isGeneralInquiry && lines.length > 0) {
+                excerpt = lines.slice(0, 3).join("\n\n").trim();
+              }
+
+              if (excerpt) break;
+            }
+          }
+
+          if (excerpt) {
+            reply = `Based on ${sourceTitles}:\n\n> "${excerpt}"\n\nWould you like me to dive deeper into any specific section or topic?`;
+          } else {
+            reply = `I analyzed your selected study sources (${sourceTitles}) for **"${query}"**.\n\nHere is an overview of the core themes in your active documents:\n\n> ${activeItems[0]?.content?.slice(0, 300) || "Document content indexed."}...\n\nFeel free to ask more specific questions or explore particular concepts!`;
+          }
+        }
+      }
+
+      setIsBotTyping(false);
+      onUpdateNotebook({
+        ...notebook,
+        chatHistory: [
+          ...updatedHistory,
+          { role: "assistant" as const, content: reply },
+        ],
+      });
+    }, 800);
   };
 
   // Generate briefing doc

@@ -32,6 +32,9 @@ uploads/
 *.docx
 *.pyc
 __pycache__/
+scratch/
+scratch_*.py
+check_api.py
 
 # Editor directories and files
 .vscode/*
