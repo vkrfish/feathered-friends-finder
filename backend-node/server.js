@@ -19,6 +19,14 @@ app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "Ultra Learn Node.js API Gateway" });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "healthy" });
+});
+
 // Setup Supabase client for backend JWT authentication
 const supabaseUrl = process.env.SUPABASE_URL || "https://peafnjhrzfetfwlksysq.supabase.co";
 const supabaseKey =

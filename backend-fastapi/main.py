@@ -42,6 +42,14 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
+@app.get("/")
+def health_check():
+    return {"status": "ok", "service": "Ultra Learn FastAPI RAG Engine"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
 # Database Configuration
 DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ultralearn")
 
