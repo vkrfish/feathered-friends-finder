@@ -40,12 +40,13 @@ function SignInPage() {
 
   // Check if session is already active; if so, redirect immediately
   useEffect(() => {
+    let isMounted = true;
     const checkActiveSession = async () => {
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session) {
+        if (session && isMounted) {
           navigate({ to: "/dashboard" });
         }
       } catch (err) {
@@ -53,6 +54,19 @@ function SignInPage() {
       }
     };
     checkActiveSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && isMounted) {
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const handleAuthError = (err: unknown, defaultMsg: string) => {

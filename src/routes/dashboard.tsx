@@ -127,6 +127,9 @@ export default function DashboardPage() {
         data: { session: activeSession },
       } = await supabase.auth.getSession();
       if (!activeSession) {
+        if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+          return;
+        }
         toast.error("Please sign in to access your workspace.");
         navigate({ to: "/signin" });
         return;
@@ -161,9 +164,11 @@ export default function DashboardPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, activeSession) => {
+    } = supabase.auth.onAuthStateChange((event, activeSession) => {
       setSession(activeSession);
-      if (!activeSession) {
+      if (activeSession) {
+        setLoadingSession(false);
+      } else if (event === "SIGNED_OUT") {
         navigate({ to: "/signin" });
       }
     });

@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { supabase } from "../integrations/supabase/client";
 import {
   FileText,
   Youtube,
@@ -685,12 +686,66 @@ function Footer() {
 }
 
 function Index() {
+  const navigate = useNavigate();
+  const [isAuthenticating, setIsAuthenticating] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.location.hash.includes("access_token");
+    }
+    return false;
+  });
+
   useEffect(() => {
     document.documentElement.style.scrollBehavior = "smooth";
     return () => {
       document.documentElement.style.scrollBehavior = "auto";
     };
   }, []);
+
+  // If user lands on / with an active session or OAuth #access_token in URL, redirect directly to /dashboard
+  useEffect(() => {
+    let isMounted = true;
+
+    // Check existing session
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (session && isMounted) {
+          navigate({ to: "/dashboard" });
+        } else if (isMounted && !window.location.hash.includes("access_token")) {
+          setIsAuthenticating(false);
+        }
+      })
+      .catch((err) => {
+        console.warn("Session check error on landing page:", err);
+        if (isMounted) setIsAuthenticating(false);
+      });
+
+    // Listen for auth state change (especially when Supabase finishes parsing #access_token from URL)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && isMounted) {
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
+
+  if (isAuthenticating) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <p className="text-sm font-medium text-foreground">Signing you in...</p>
+          <p className="text-xs text-muted-foreground">Redirecting to your study workspace</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="overflow-hidden pt-4 bg-background min-h-screen text-foreground selection:bg-primary/20 selection:text-foreground">
