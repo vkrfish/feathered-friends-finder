@@ -987,61 +987,63 @@ export default function DashboardPage() {
         <div className="flex flex-col min-h-screen">
           
           {/* Top Header bar */}
-          <header className="flex items-center justify-between border-b border-white/5 bg-card/45 px-6 py-4.5 backdrop-blur-xl sticky top-0 z-45 gap-4">
-            <Link to="/" className="flex items-center gap-2 transition-transform hover:scale-[1.01]">
-              <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary/20 border border-primary/30">
+          <header className="flex items-center justify-between border-b border-border bg-card/85 px-6 py-3.5 backdrop-blur-md sticky top-0 z-40 gap-4">
+            <Link to="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+              <div className="grid h-7 w-7 place-items-center rounded-md bg-primary/15 border border-primary/25">
                 <div
                   className="h-3.5 w-3.5 rotate-45 bg-primary"
                   style={{ clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)" }}
                 />
               </div>
-              <span className="font-display text-xl font-bold tracking-tight text-white glow-text">
+              <span className="font-display text-lg font-bold tracking-tight text-foreground">
                 LearnX
               </span>
             </Link>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* Backend Mode Switch */}
               <button
                 onClick={() => {
                   setUseRealBackend(!useRealBackend);
                   toast.info(
                     !useRealBackend
-                      ? "Connecting to local PostgreSQL API Gateway..."
+                      ? "Connecting to PostgreSQL API Gateway..."
                       : "Switched to local simulated memory mode."
                   );
                 }}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-mono font-bold tracking-wide uppercase border transition-all ${
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-mono font-medium border transition-colors ${
                   useRealBackend && !backendOffline
-                    ? "bg-primary/10 border-primary/20 text-primary"
-                    : "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                    ? "bg-primary/10 border-primary/25 text-primary"
+                    : "bg-secondary border-border text-muted-foreground"
                 }`}
+                title="Toggle between PostgreSQL Cloud Gateway and Local Simulated Storage"
               >
+                <span className={`h-1.5 w-1.5 rounded-full ${useRealBackend && !backendOffline ? "bg-primary" : "bg-muted-foreground"}`} />
                 <span>{useRealBackend && !backendOffline ? "Postgres Gateway" : "Simulated Local"}</span>
               </button>
 
               {/* Streak Badge */}
-              <div className="flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/5 px-3.5 py-1.5 text-xs font-semibold text-primary transition-all hover:bg-primary/10 select-none">
-                <Flame className="h-3.5 w-3.5 text-primary animate-pulse" />
-                <span>3 day streak</span>
+              <div className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-3 py-1 text-xs font-medium text-foreground select-none">
+                <Flame className="h-3.5 w-3.5 text-primary" />
+                <span>3-day streak</span>
               </div>
 
               {/* User Dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 border border-primary/30 text-xs font-semibold uppercase text-primary hover:brightness-110 active:scale-95 transition-all outline-none"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 border border-primary/25 text-xs font-semibold uppercase text-primary hover:opacity-90 active:scale-95 transition-all outline-none"
                 >
                   {profileInitial}
                 </button>
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-xl border border-white/10 bg-[#0c0d12] p-1 shadow-2xl z-50 text-left backdrop-blur-xl">
-                    <div className="px-3 py-2 border-b border-white/5 text-[10px] text-muted-foreground truncate font-mono">
+                  <div className="absolute right-0 mt-2 w-52 rounded-lg border border-border bg-card p-1 shadow-lg z-50 text-left">
+                    <div className="px-3 py-2 border-b border-border text-[11px] text-muted-foreground truncate font-mono">
                       {session?.user?.email}
                     </div>
                     <button
                       onClick={handleSignOut}
-                      className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-xs text-red-400 hover:bg-white/5 transition-all text-left font-semibold"
+                      className="flex w-full items-center gap-2 px-3 py-2 rounded-md text-xs text-destructive hover:bg-secondary transition-colors text-left font-medium"
                     >
                       <X className="h-3.5 w-3.5" />
                       Sign Out
@@ -1052,73 +1054,73 @@ export default function DashboardPage() {
             </div>
           </header>
 
-          <div className="mx-auto max-w-[1140px] w-full px-6 pb-24 pt-10 flex-1 flex flex-col justify-start text-left">
+          <div className="mx-auto max-w-[1140px] w-full px-6 pb-24 pt-8 flex-1 flex flex-col justify-start text-left">
             
             {/* Title heading */}
-            <div className="mb-10">
-              <h1 className="text-4xl font-extrabold tracking-tight text-white font-display md:text-5xl">
-                Let's study, <span className="bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent">{profileName}</span>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground font-display md:text-4xl">
+                Welcome back, {profileName}
               </h1>
-              <p className="text-sm text-muted-foreground mt-2 font-mono">
-                "cooked for exams? no cap we got you. select or create a notebook below to cram."
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1.5">
+                Select a study notebook to resume your active session, or create a new workspace to ingest materials.
               </p>
             </div>
 
             {/* Trial Banner */}
             {showTrial && (
-              <div className="relative mb-10 rounded-2xl border border-white/5 bg-gradient-to-r from-primary/5 to-transparent p-5.5 shadow-lg backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="relative mb-8 rounded-lg border border-border bg-secondary/30 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <button
                   onClick={() => setShowTrial(false)}
-                  className="absolute right-3.5 top-3.5 rounded-full p-1 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors"
+                  className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
                 <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span className="flex h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
-                    <span>Free Cramming Tier Active</span>
+                  <h3 className="text-xs font-semibold text-foreground flex items-center gap-2">
+                    <span className="flex h-2 w-2 rounded-full bg-primary" />
+                    <span>Active Study Workspace</span>
                   </h3>
                   <p className="mt-1 text-xs text-muted-foreground max-w-xl leading-relaxed">
-                    You are currently running on the Socratic Free tier. Upgrade to access unlimited deep research dossiers, custom Edge TTS podcast narrations, and 100+ page vector ingestion.
+                    Full semantic vector retrieval, active recall flashcards, and Socratic tutoring are enabled.
                   </p>
                 </div>
-                <a
-                  href="#"
-                  className="rounded-full bg-white px-5 py-2 text-xs font-bold text-black hover:bg-white/95 active:scale-95 transition-all inline-block shadow shrink-0 self-start md:self-auto"
+                <button
+                  onClick={() => setShowTrial(false)}
+                  className="rounded-md border border-border bg-secondary px-3.5 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/80 transition-colors inline-block shadow-xs shrink-0 self-start md:self-auto"
                 >
-                  View Plans
-                </a>
+                  Dismiss
+                </button>
               </div>
             )}
 
             {/* Lobby List header & search */}
             <div>
-              <div className="flex flex-col gap-4 md:flex-row md:items-center justify-between border-b border-white/5 pb-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-2xl font-bold tracking-tight text-white font-display">
-                    My Study Notebooks
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between border-b border-border pb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-lg font-bold tracking-tight text-foreground font-display">
+                    Study Notebooks
                   </h3>
-                  <span className="rounded-full bg-white/5 border border-white/5 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-                    {filteredNotebooks.length} notebooks
+                  <span className="rounded-md bg-secondary border border-border px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                    {filteredNotebooks.length}
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                   {/* Search box */}
-                  <div className="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] px-3.5 py-1.5 w-full md:w-64 focus-within:border-primary/45 focus-within:bg-white/[0.04] transition-all">
-                    <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div className="flex items-center gap-2 rounded-md border border-input bg-secondary/20 px-3 py-1.5 w-full sm:w-60 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/30 transition-all">
+                    <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Search notebooks..."
-                      className="w-full bg-transparent text-xs text-white placeholder:text-muted-foreground outline-none"
+                      className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 outline-none"
                     />
                   </div>
 
                   {/* Sort dropdown */}
                   <button
                     onClick={() => setSortBy(sortBy === "newest" ? "oldest" : "newest")}
-                    className="flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.02] px-3.5 py-1.5 text-xs text-muted-foreground hover:text-white transition-all font-semibold"
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
                   >
                     <span>{sortBy === "newest" ? "Newest" : "Oldest"}</span>
                     <ChevronDown className="h-3 w-3" />
@@ -1127,20 +1129,20 @@ export default function DashboardPage() {
               </div>
 
               {/* Grid / List render */}
-              <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {/* 1. Add Notebook Card */}
                 <div
                   onClick={() => setShowCreateDialog(true)}
-                  className="group cursor-pointer rounded-2xl border border-dashed border-white/10 hover:border-primary/40 bg-white/[0.01] hover:bg-primary/[0.01] h-48 flex flex-col items-center justify-center transition-all shadow-md hover:scale-[1.01]"
+                  className="group cursor-pointer rounded-lg border border-dashed border-border hover:border-primary/50 bg-secondary/15 hover:bg-secondary/35 h-44 flex flex-col items-center justify-center transition-all shadow-xs"
                 >
-                  <div className="grid h-11 w-11 place-items-center rounded-full bg-primary/10 border border-primary/20 group-hover:scale-105 group-hover:bg-primary/20 transition-all text-primary mb-3">
-                    <Plus className="h-5 w-5" />
+                  <div className="grid h-10 w-10 place-items-center rounded-md bg-primary/10 border border-primary/20 text-primary mb-2.5 group-hover:scale-105 transition-transform">
+                    <Plus className="h-4.5 w-4.5" />
                   </div>
-                  <span className="font-display font-bold text-sm text-white group-hover:text-primary transition-colors">
+                  <span className="font-display font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
                     New Notebook
                   </span>
-                  <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">
-                    create a study folder
+                  <span className="text-[10px] text-muted-foreground mt-0.5">
+                    Create a structured study workspace
                   </span>
                 </div>
 
@@ -1153,33 +1155,30 @@ export default function DashboardPage() {
                       setSelectedSourceIds([]);
                       setSources([]);
                     }}
-                    className="group cursor-pointer rounded-2xl border border-white/5 bg-[#0a0b10]/45 p-6 hover:border-primary/25 transition-all shadow-xl hover:scale-[1.01] flex flex-col justify-between h-48 text-left relative overflow-hidden"
+                    className="group cursor-pointer rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all shadow-xs flex flex-col justify-between h-44 text-left relative"
                   >
-                    {/* Visual accent glow */}
-                    <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 rounded-bl-full pointer-events-none group-hover:bg-primary/10 transition-colors" />
-
                     <div>
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="rounded-lg bg-primary/10 border border-primary/20 p-2 text-primary">
-                          <FileStack className="h-4.5 w-4.5" />
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="rounded-md bg-primary/10 border border-primary/20 p-1.5 text-primary">
+                          <FileStack className="h-4 w-4" />
                         </div>
                         <button
                           onClick={(e) => onDeleteNotebook(nb.id, e)}
-                          className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-red-400 transition-colors"
+                          className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
                           title="Delete Notebook"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                      <h4 className="font-display font-extrabold text-white text-base mt-4 truncate group-hover:text-primary transition-colors">
+                      <h4 className="font-display font-bold text-foreground text-sm mt-3 truncate group-hover:text-primary transition-colors">
                         {nb.title}
                       </h4>
-                      <p className="text-[10px] text-muted-foreground font-mono mt-1 line-clamp-2 leading-relaxed">
+                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
                         {nb.notes || "No notes in this notebook yet."}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-4 text-[10px] font-mono text-muted-foreground">
+                    <div className="flex items-center justify-between border-t border-border pt-2.5 mt-3 text-[10px] text-muted-foreground">
                       <span>
                         {new Date(nb.createdAt).toLocaleDateString("en-US", {
                           month: "short",
@@ -1187,8 +1186,8 @@ export default function DashboardPage() {
                           year: "numeric",
                         })}
                       </span>
-                      <span className="bg-primary/10 text-primary px-2 py-0.5 border border-primary/10 rounded">
-                        Active Recall Folder
+                      <span className="font-mono text-[9px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                        Workspace
                       </span>
                     </div>
                   </div>
@@ -1199,39 +1198,39 @@ export default function DashboardPage() {
 
           {/* 4. MODAL DIALOG TO CREATE NOTEBOOK */}
           {showCreateDialog && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-              <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0f14] p-6 shadow-2xl text-left relative overflow-hidden">
-                <h3 className="font-display font-extrabold text-lg text-white mb-2">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+              <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-xl text-left">
+                <h3 className="font-display font-bold text-base text-foreground mb-1.5">
                   Create Study Notebook
                 </h3>
                 <p className="text-xs text-muted-foreground mb-4">
-                  Name your notebook. If left blank, we'll auto-generate a funny title for you.
+                  Enter a title for your new workspace to organize related lecture notes, textbooks, and flashcards.
                 </p>
 
                 <input
                   value={newNotebookTitle}
                   onChange={(e) => setNewNotebookTitle(e.target.value)}
-                  placeholder="e.g. Delulu Cram Session, Midterm Panic Kit"
-                  className="w-full rounded-xl border border-white/10 bg-[#08090d] px-4 py-2.5 text-xs text-white placeholder:text-white/20 focus:border-primary focus:outline-none transition-colors mb-5"
+                  placeholder="e.g. Molecular Biology Midterm, Macroeconomics Q3"
+                  className="w-full rounded-md border border-input bg-secondary/30 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-1 focus:ring-primary/30 outline-none transition-colors mb-4"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") onCreateNotebook();
                   }}
                   autoFocus
                 />
 
-                <div className="flex justify-end gap-2.5">
+                <div className="flex justify-end gap-2">
                   <button
                     onClick={() => {
                       setShowCreateDialog(false);
                       setNewNotebookTitle("");
                     }}
-                    className="rounded-full border border-white/10 px-5 py-2 text-xs font-semibold text-muted-foreground hover:bg-white/5 hover:text-white"
+                    className="rounded-md border border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={onCreateNotebook}
-                    className="rounded-full bg-primary px-5 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 active:scale-95 transition-all shadow-[0_0_12px_oklch(0.82_0.14_160/0.25)]"
+                    className="rounded-md bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 active:scale-95 transition-all shadow-xs"
                   >
                     Create Notebook
                   </button>
@@ -1880,23 +1879,23 @@ function StudySessionPanel({
     <div className="flex h-screen flex-col bg-background text-foreground overflow-hidden">
       
       {/* 1. TOP HEADER BAR */}
-      <header className="flex h-16 items-center justify-between px-6 border-b border-white/5 bg-card/65 backdrop-blur-xl shrink-0">
+      <header className="flex h-14 items-center justify-between px-5 border-b border-border/60 bg-card/80 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs text-white/80 hover:bg-white/10 hover:text-white transition-all outline-none"
+            className="flex items-center gap-1.5 rounded-md border border-border/70 bg-secondary/60 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary hover:border-border transition-colors outline-none"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Notebooks Lobby</span>
+            <ArrowLeft className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>Notebooks</span>
           </button>
 
-          <div className="h-4 w-px bg-white/10" />
+          <div className="h-4 w-px bg-border/60" />
 
           <div className="min-w-0 text-left">
-            <h1 className="font-display font-extrabold text-sm text-white truncate max-w-xs md:max-w-md">
+            <h1 className="font-semibold text-sm text-foreground truncate max-w-xs md:max-w-md">
               {notebook.title}
             </h1>
-            <p className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 uppercase tracking-wider">
+            <p className="text-[11px] text-muted-foreground truncate font-mono">
               {selectedSourceIds.length} of {sources.length} sources active
             </p>
           </div>
@@ -1904,8 +1903,9 @@ function StudySessionPanel({
 
         <div className="flex items-center gap-3">
           {useRealBackend && (
-            <span className="text-[9px] font-bold uppercase text-primary px-2.5 py-1 rounded-full bg-primary/10 border border-primary/25 select-none tracking-wide">
-              RAG Engine Connected
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-primary px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 select-none">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              RAG Engine Live
             </span>
           )}
         </div>
@@ -1915,34 +1915,34 @@ function StudySessionPanel({
       <div className="flex flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
         
         {/* COLUMN 1: LEFT SOURCE sidebar checklist (lg:col-span-3) */}
-        <div className="lg:col-span-3 flex flex-col border-r border-white/5 bg-[#090a0d] overflow-hidden">
+        <div className="lg:col-span-3 flex flex-col border-r border-border/60 bg-card/40 overflow-hidden">
           {activeSourcePreviewId && previewSource ? (
             /* SOURCE PREVIEW MODE (SLIDES OVER THE CHECKLIST) */
             <div className="flex flex-col h-full overflow-hidden">
               {/* Preview controls header */}
-              <div className="flex items-center justify-between border-b border-white/5 bg-[#08090d]/60 px-4 py-2.5 text-[11px] text-muted-foreground shrink-0">
+              <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3.5 py-2 text-xs text-muted-foreground shrink-0">
                 <button
                   onClick={() => {
                     setActiveSourcePreviewId(null);
                     setPdfPageNum(null);
                   }}
-                  className="flex items-center gap-1 text-white hover:text-primary transition-colors font-semibold"
+                  className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors font-medium text-xs"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>Sources List</span>
+                  <span>Sources</span>
                 </button>
                 
                 {previewSource.kind === "pdf" && (
-                  <div className="flex items-center bg-white/5 rounded-full p-0.5 border border-white/10 shrink-0">
+                  <div className="flex items-center bg-secondary/80 rounded-md p-0.5 border border-border/60 shrink-0">
                     <button
                       onClick={() => setPdfViewMode("original")}
-                      className={`rounded-full px-2.5 py-0.5 text-[8px] font-bold ${pdfViewMode === "original" ? "bg-white text-black" : "text-white/60"}`}
+                      className={`rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-colors ${pdfViewMode === "original" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       PDF
                     </button>
                     <button
                       onClick={() => setPdfViewMode("text")}
-                      className={`rounded-full px-2.5 py-0.5 text-[8px] font-bold ${pdfViewMode === "text" ? "bg-white text-black" : "text-white/60"}`}
+                      className={`rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-colors ${pdfViewMode === "text" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       TXT
                     </button>
@@ -1951,10 +1951,10 @@ function StudySessionPanel({
 
                 <button
                   onClick={() => toggleTTS(previewSource.content)}
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${isSpeaking ? "bg-primary/20 text-primary animate-pulse" : "hover:text-white"}`}
+                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${isSpeaking ? "bg-primary/15 text-primary font-medium" : "hover:text-foreground text-muted-foreground"}`}
                 >
-                  <Volume2 className="h-3 w-3" />
-                  <span>Read</span>
+                  <Volume2 className="h-3.5 w-3.5" />
+                  <span>{isSpeaking ? "Speaking" : "Read"}</span>
                 </button>
               </div>
 
@@ -2115,13 +2115,13 @@ function StudySessionPanel({
           ) : (
             /* SOURCES LIST CHECKLIST VIEW */
             <div className="flex flex-col h-full overflow-hidden">
-              <div className="flex items-center justify-between border-b border-white/5 bg-[#090a0f] px-4 py-3 shrink-0">
-                <span className="font-display font-extrabold text-sm text-white">Sources ({sources.length})</span>
+              <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-4 py-3 shrink-0">
+                <span className="font-semibold text-xs tracking-tight text-foreground">Sources ({sources.length})</span>
                 
                 {/* Trigger Add Source Panel */}
                 <button
                   onClick={() => setActiveInputMode(activeInputMode === "none" ? "files" : "none")}
-                  className="rounded-full bg-primary/10 border border-primary/20 hover:bg-primary/20 hover:scale-105 active:scale-95 text-primary p-1.5 transition-all outline-none"
+                  className="rounded-md bg-secondary/80 border border-border/70 hover:bg-secondary text-foreground p-1.5 transition-colors outline-none"
                   title="Add source to notebook"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -2130,9 +2130,9 @@ function StudySessionPanel({
 
               {/* Dynamic Add Source Panel Overlay inside Left panel */}
               {activeInputMode !== "none" && (
-                <div className="border-b border-white/5 bg-primary/5 p-4 text-left shrink-0">
-                  <div className="flex items-center justify-between border-b border-white/[0.03] pb-2 mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary font-mono">
+                <div className="border-b border-border/60 bg-secondary/20 p-4 text-left shrink-0">
+                  <div className="flex items-center justify-between border-b border-border/40 pb-2 mb-3">
+                    <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-primary">
                       Ingest: {activeInputMode}
                     </span>
                     <button
@@ -2140,17 +2140,17 @@ function StudySessionPanel({
                         setActiveInputMode("none");
                         setInputText("");
                       }}
-                      className="text-muted-foreground hover:text-white"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
 
                   {activeInputMode === "files" ? (
-                    <label className="flex cursor-pointer flex-col items-center justify-center border border-dashed border-white/10 rounded-xl p-5 hover:border-primary/30 bg-black/20 hover:bg-black/35 transition-all text-center">
-                      <Paperclip className="h-6 w-6 text-muted-foreground mb-2" />
-                      <span className="text-[10px] font-semibold text-white/90">Select File</span>
-                      <span className="text-[8px] text-muted-foreground mt-0.5 font-mono">PDF, Word, TXT up to 15MB</span>
+                    <label className="flex cursor-pointer flex-col items-center justify-center border border-dashed border-border/80 rounded-lg p-5 hover:border-primary/50 bg-background/50 hover:bg-secondary/40 transition-colors text-center">
+                      <Paperclip className="h-5 w-5 text-muted-foreground mb-2" />
+                      <span className="text-xs font-medium text-foreground">Select File</span>
+                      <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">PDF, Word, TXT, MD up to 15MB</span>
                       <input
                         type="file"
                         accept=".pdf,.docx,.txt,.md"
@@ -2164,9 +2164,9 @@ function StudySessionPanel({
                         <textarea
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
-                          placeholder="Paste academic definitions or lecture logs..."
+                          placeholder="Paste lecture notes or reference text..."
                           rows={4}
-                          className="w-full bg-[#08090d] border border-white/10 rounded-lg p-2 text-[10px] text-white outline-none focus:border-primary font-sans resize-none"
+                          className="w-full bg-background border border-border/70 rounded-md p-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 font-sans resize-none"
                         />
                       ) : (
                         <input
@@ -2174,12 +2174,12 @@ function StudySessionPanel({
                           onChange={(e) => setInputText(e.target.value)}
                           placeholder={
                             activeInputMode === "youtube"
-                              ? "Paste Youtube Link..."
+                              ? "Paste YouTube URL..."
                               : activeInputMode === "websites"
-                                ? "Paste Website Link..."
+                                ? "Paste Website URL..."
                                 : "Research topic..."
                           }
-                          className="w-full bg-[#08090d] border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-primary"
+                          className="w-full bg-background border border-border/70 rounded-md px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               if (activeInputMode === "youtube") onAddYoutube();
@@ -2190,13 +2190,13 @@ function StudySessionPanel({
                         />
                       )}
                       
-                      <div className="flex justify-end gap-1.5 text-[9px]">
+                      <div className="flex justify-end gap-1.5 text-xs">
                         <button
                           onClick={() => {
                             setActiveInputMode("none");
                             setInputText("");
                           }}
-                          className="px-2.5 py-1 border border-white/5 rounded-full hover:bg-white/5"
+                          className="px-2.5 py-1 border border-border/60 rounded-md hover:bg-secondary transition-colors text-muted-foreground"
                         >
                           Cancel
                         </button>
@@ -2207,31 +2207,31 @@ function StudySessionPanel({
                             else if (activeInputMode === "text") onAddText();
                             else if (activeInputMode === "research") onAddDeepResearch();
                           }}
-                          className="px-3 py-1 bg-primary text-primary-foreground font-bold rounded-full hover:brightness-110"
+                          className="px-3 py-1 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors"
                         >
-                          Process
+                          Add Source
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Tab icons to easily switch modes */}
-                  <div className="flex justify-between items-center mt-3 border-t border-white/[0.03] pt-2 text-muted-foreground">
-                    <button onClick={() => setActiveInputMode("files")} className={`p-1 hover:text-white ${activeInputMode === "files" ? "text-primary" : ""}`} title="Upload PDF"><Paperclip className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setActiveInputMode("youtube")} className={`p-1 hover:text-white ${activeInputMode === "youtube" ? "text-primary" : ""}`} title="YouTube link"><Youtube className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setActiveInputMode("websites")} className={`p-1 hover:text-white ${activeInputMode === "websites" ? "text-primary" : ""}`} title="Web Page"><Link2 className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setActiveInputMode("text")} className={`p-1 hover:text-white ${activeInputMode === "text" ? "text-primary" : ""}`} title="Text paste"><Type className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setActiveInputMode("research")} className={`p-1 hover:text-white ${activeInputMode === "research" ? "text-primary" : ""}`} title="Deep agent research"><Search className="h-3.5 w-3.5" /></button>
+                  {/* Mode switch tabs */}
+                  <div className="flex justify-between items-center mt-3 border-t border-border/40 pt-2 text-muted-foreground">
+                    <button onClick={() => setActiveInputMode("files")} className={`p-1 hover:text-foreground rounded transition-colors ${activeInputMode === "files" ? "text-primary" : ""}`} title="Upload PDF"><Paperclip className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setActiveInputMode("youtube")} className={`p-1 hover:text-foreground rounded transition-colors ${activeInputMode === "youtube" ? "text-primary" : ""}`} title="YouTube link"><Youtube className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setActiveInputMode("websites")} className={`p-1 hover:text-foreground rounded transition-colors ${activeInputMode === "websites" ? "text-primary" : ""}`} title="Web Page"><Link2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setActiveInputMode("text")} className={`p-1 hover:text-foreground rounded transition-colors ${activeInputMode === "text" ? "text-primary" : ""}`} title="Text paste"><Type className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setActiveInputMode("research")} className={`p-1 hover:text-foreground rounded transition-colors ${activeInputMode === "research" ? "text-primary" : ""}`} title="Deep Research"><Search className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
               )}
 
               {/* Scrollable list of source cards */}
-              <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 pr-2 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 pr-2 scrollbar-thin">
                 {sources.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 opacity-30 text-center my-6">
+                  <div className="flex flex-col items-center justify-center h-48 opacity-40 text-center my-6">
                     <FileStack className="h-8 w-8 mb-2" />
-                    <p className="text-xs">No sources added yet.</p>
+                    <p className="text-xs text-muted-foreground">No sources added yet.</p>
                   </div>
                 ) : (
                   sources.map((src) => {
@@ -2240,13 +2240,13 @@ function StudySessionPanel({
                       <div
                         key={src.id}
                         onClick={() => setActiveSourcePreviewId(src.id)}
-                        className={`group cursor-pointer rounded-xl border p-3 flex items-center justify-between text-left transition-all ${
+                        className={`group cursor-pointer rounded-lg border p-2.5 flex items-center justify-between text-left transition-colors ${
                           isActive
-                            ? "bg-primary/[0.02] border-primary/20"
-                            : "bg-[#0b0c10]/30 border-white/5 hover:border-white/10"
+                            ? "bg-primary/[0.04] border-primary/30"
+                            : "bg-secondary/30 border-border/50 hover:border-border hover:bg-secondary/50"
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           
                           {/* Checkbox wrapper */}
                           <div
@@ -2254,20 +2254,20 @@ function StudySessionPanel({
                               e.stopPropagation();
                               onToggleSource(src.id);
                             }}
-                            className={`grid h-4.5 w-4.5 place-items-center rounded border transition-colors shrink-0 ${
+                            className={`grid h-4 w-4 place-items-center rounded border transition-colors shrink-0 ${
                               isActive
                                 ? "bg-primary border-primary text-primary-foreground"
-                                : "border-white/20 bg-black/40 hover:border-white/45"
+                                : "border-border/80 bg-background hover:border-foreground/50"
                             }`}
                           >
-                            {isActive && <Check className="h-3 w-3 stroke-[3]" />}
+                            {isActive && <Check className="h-3 w-3 stroke-[2.5]" />}
                           </div>
 
                           <div className="min-w-0">
-                            <h5 className="font-semibold text-white/90 text-[11px] group-hover:text-primary transition-colors truncate">
+                            <h5 className="font-medium text-foreground text-xs group-hover:text-primary transition-colors truncate">
                               {src.title}
                             </h5>
-                            <span className="text-[9px] text-muted-foreground capitalize font-mono mt-0.5 block flex items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground capitalize font-mono mt-0.5 flex items-center gap-1">
                               {src.kind === "pdf" ? (
                                 <FileText className="h-2.5 w-2.5 text-red-400" />
                               ) : src.kind === "youtube" ? (
@@ -2289,9 +2289,9 @@ function StudySessionPanel({
                             e.stopPropagation();
                             onDeleteSource(src.id);
                           }}
-                          className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     );
@@ -2303,58 +2303,54 @@ function StudySessionPanel({
         </div>
 
         {/* COLUMN 2: CENTER PANEL: GROUNDED CHAT & EMPTY LOADER (lg:col-span-5) */}
-        <div className="lg:col-span-5 flex flex-col bg-[#07080a] border-r border-white/5 overflow-hidden relative">
+        <div className="lg:col-span-5 flex flex-col bg-background border-r border-border/60 overflow-hidden relative">
           {sources.length === 0 ? (
             /* EMPTY NOTEBOOK STATE OVERLAY */
-            <div className="flex-1 flex flex-col justify-center items-center text-center p-6 bg-[#07080a]">
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-primary/5 rounded-full blur-[80px]" />
-              </div>
-
-              <div className="relative mb-6">
-                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/5 border border-primary/25 text-primary shadow-[0_0_20px_oklch(0.82_0.14_160/0.1)]">
-                  <FileStack className="h-7 w-7 animate-pulse" />
+            <div className="flex-1 flex flex-col justify-center items-center text-center p-6 bg-background">
+              <div className="mb-4">
+                <div className="grid h-12 w-12 place-items-center rounded-lg bg-primary/10 border border-primary/20 text-primary">
+                  <FileStack className="h-6 w-6" />
                 </div>
               </div>
 
-              <h2 className="text-xl font-display font-extrabold text-white mb-2">Add sources to get started</h2>
-              <p className="text-xs text-muted-foreground max-w-sm leading-relaxed mb-8">
-                This study notebook is empty. Load lecture guides, past exams, website tutorials, or research topics to start querying.
+              <h2 className="text-base font-semibold text-foreground mb-1">Add knowledge sources</h2>
+              <p className="text-xs text-muted-foreground max-w-sm leading-relaxed mb-6">
+                This study workspace is empty. Load course documents, lecture recordings, research, or notes to begin questioning.
               </p>
 
-              {/* Large styled tiles for ingestion */}
-              <div className="grid grid-cols-2 gap-3.5 w-full max-w-sm text-left">
+              {/* Ingestion shortcuts */}
+              <div className="grid grid-cols-2 gap-3 w-full max-w-sm text-left">
                 <div
                   onClick={() => setActiveInputMode("files")}
-                  className="rounded-xl border border-white/5 bg-[#0b0c10]/45 p-3.5 hover:border-primary/25 transition-all cursor-pointer hover:scale-[1.01]"
+                  className="rounded-lg border border-border/70 bg-card p-3 hover:border-primary/40 hover:bg-secondary/40 transition-colors cursor-pointer"
                 >
-                  <Paperclip className="h-4 w-4 text-primary mb-2" />
-                  <span className="font-semibold text-xs text-white block">Upload Files</span>
-                  <span className="text-[9px] text-muted-foreground block font-mono mt-0.5">PDF, TXT, Word</span>
+                  <Paperclip className="h-4 w-4 text-primary mb-1.5" />
+                  <span className="font-medium text-xs text-foreground block">Upload Documents</span>
+                  <span className="text-[10px] text-muted-foreground block font-mono">PDF, TXT, DOCX</span>
                 </div>
                 <div
                   onClick={() => setActiveInputMode("youtube")}
-                  className="rounded-xl border border-white/5 bg-[#0b0c10]/45 p-3.5 hover:border-primary/25 transition-all cursor-pointer hover:scale-[1.01]"
+                  className="rounded-lg border border-border/70 bg-card p-3 hover:border-primary/40 hover:bg-secondary/40 transition-colors cursor-pointer"
                 >
-                  <Youtube className="h-4 w-4 text-red-500 mb-2" />
-                  <span className="font-semibold text-xs text-white block">YouTube link</span>
-                  <span className="text-[9px] text-muted-foreground block font-mono mt-0.5">Video lecture</span>
+                  <Youtube className="h-4 w-4 text-red-500 mb-1.5" />
+                  <span className="font-medium text-xs text-foreground block">YouTube Video</span>
+                  <span className="text-[10px] text-muted-foreground block font-mono">Lecture link</span>
                 </div>
                 <div
                   onClick={() => setActiveInputMode("websites")}
-                  className="rounded-xl border border-white/5 bg-[#0b0c10]/45 p-3.5 hover:border-primary/25 transition-all cursor-pointer hover:scale-[1.01]"
+                  className="rounded-lg border border-border/70 bg-card p-3 hover:border-primary/40 hover:bg-secondary/40 transition-colors cursor-pointer"
                 >
-                  <Globe className="h-4 w-4 text-blue-400 mb-2" />
-                  <span className="font-semibold text-xs text-white block">Website URL</span>
-                  <span className="text-[9px] text-muted-foreground block font-mono mt-0.5">Wikipedia, Docs</span>
+                  <Globe className="h-4 w-4 text-blue-400 mb-1.5" />
+                  <span className="font-medium text-xs text-foreground block">Web Documentation</span>
+                  <span className="text-[10px] text-muted-foreground block font-mono">Articles, Docs</span>
                 </div>
                 <div
                   onClick={() => setActiveInputMode("research")}
-                  className="rounded-xl border border-white/5 bg-[#0b0c10]/45 p-3.5 hover:border-primary/25 transition-all cursor-pointer hover:scale-[1.01]"
+                  className="rounded-lg border border-border/70 bg-card p-3 hover:border-primary/40 hover:bg-secondary/40 transition-colors cursor-pointer"
                 >
-                  <Search className="h-4 w-4 text-emerald-400 mb-2" />
-                  <span className="font-semibold text-xs text-white block">Deep Research</span>
-                  <span className="text-[9px] text-muted-foreground block font-mono mt-0.5">Agent crawler</span>
+                  <Search className="h-4 w-4 text-emerald-400 mb-1.5" />
+                  <span className="font-medium text-xs text-foreground block">Deep Topic Research</span>
+                  <span className="text-[10px] text-muted-foreground block font-mono">Automated synthesis</span>
                 </div>
               </div>
             </div>
@@ -2363,25 +2359,25 @@ function StudySessionPanel({
             <div className="flex-1 flex flex-col justify-between overflow-hidden">
               
               {/* Grounded chat header */}
-              <div className="border-b border-white/5 bg-[#08090f]/75 px-5 py-3 text-left shrink-0 select-none flex items-center justify-between">
+              <div className="border-b border-border/60 bg-muted/20 px-4 py-2.5 text-left shrink-0 select-none flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-mono text-primary uppercase font-bold tracking-wider">
-                    AI Study Assistant
+                  <span className="text-[10px] font-mono text-primary uppercase font-semibold tracking-wider">
+                    Socratic AI Tutor
                   </span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">
-                    Grounded in {selectedSourceIds.length} checked knowledge source{selectedSourceIds.length !== 1 && "s"}
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Grounded in {selectedSourceIds.length} checked source{selectedSourceIds.length !== 1 && "s"}
                   </p>
                 </div>
 
                 {selectedSourceIds.length === 0 && (
-                  <span className="text-[8px] font-bold uppercase text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded animate-pulse">
-                    No active source
+                  <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                    No source selected
                   </span>
                 )}
               </div>
 
               {/* Message Feed */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
                 {(notebook.chatHistory || []).map((msg, idx) => (
                   <div
                     key={idx}
@@ -2390,22 +2386,22 @@ function StudySessionPanel({
                     }`}
                   >
                     {msg.role === "assistant" && (
-                      <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center font-bold text-[9px] text-primary shrink-0 select-none font-mono">
+                      <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none font-mono">
                         AI
                       </div>
                     )}
                     
                     <div
-                      className={`rounded-2xl border px-3.5 py-3 max-w-[85%] text-left relative group/bubble ${
+                      className={`rounded-lg border p-3.5 max-w-[85%] text-left relative group/bubble ${
                         msg.role === "user"
-                          ? "bg-white/[0.03] border-white/10 text-white rounded-tr-none"
-                          : "bg-[#0b0c11] border-white/5 text-white/95 rounded-tl-none"
+                          ? "bg-secondary/70 border-border/60 text-foreground"
+                          : "bg-card border-border/60 text-card-foreground shadow-xs"
                       }`}
                     >
                       {msg.role === "assistant" && (
                         <button
                           onClick={() => pinMessage(msg.content)}
-                          className="absolute -top-2 -right-2 bg-black border border-white/10 p-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-white/10 opacity-0 group-hover/bubble:opacity-100 transition-all z-20 shadow-xl"
+                          className="absolute top-2 right-2 bg-background border border-border/70 p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-secondary opacity-0 group-hover/bubble:opacity-100 transition-opacity z-10"
                           title="Pin response to Noteboard"
                         >
                           <Pin className="h-3 w-3" />
@@ -2413,7 +2409,7 @@ function StudySessionPanel({
                       )}
 
                       {msg.role === "assistant" ? (
-                        <div className="space-y-2.5">
+                        <div className="space-y-2">
                           {msg.content.split("\n").map((line, lidx) => {
                             
                             // Render **bold text**
@@ -2421,7 +2417,7 @@ function StudySessionPanel({
                               return str.split(/(\*\*.*?\*\*)/g).map((p, j) => {
                                 if (p.startsWith("**") && p.endsWith("**")) {
                                   return (
-                                    <strong key={j} className="font-semibold text-white">
+                                    <strong key={j} className="font-semibold text-foreground">
                                       {p.slice(2, -2)}
                                     </strong>
                                   );
@@ -2441,22 +2437,21 @@ function StudySessionPanel({
                                     <button
                                       key={i}
                                       onClick={() => {
-                                        // Open first PDF source and preview page X
                                         const pdfSrc = sources.find(s => s.kind === "pdf");
                                         if (pdfSrc) {
                                           setActiveSourcePreviewId(pdfSrc.id);
                                           setPdfViewMode("original");
                                           setPdfPageNum(page);
-                                          toast.success(`Jumping to original PDF: ${pdfSrc.title} (Page ${page})`);
+                                          toast.success(`Opening page ${page} in ${pdfSrc.title}`);
                                         } else {
-                                          toast.info(`Cited content excerpt page ${page}.`);
+                                          toast.info(`Source cited: Page ${page}`);
                                         }
                                       }}
-                                      className="mx-1 align-baseline inline-flex items-center gap-0.5 bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary text-[8.5px] rounded-full px-2 py-0.5 transition-all font-mono font-bold"
+                                      className="mx-1 align-baseline inline-flex items-center gap-1 bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary text-[10px] rounded px-1.5 py-0.5 transition-colors font-mono font-medium"
                                       title={`Jump to Page ${page}`}
                                     >
                                       <BookOpen className="h-2.5 w-2.5" />
-                                      <span>{page}</span>
+                                      <span>p.{page}</span>
                                     </button>
                                   );
                                 }
@@ -2467,27 +2462,27 @@ function StudySessionPanel({
                             const cleanLine = line;
                             if (cleanLine.startsWith("### ")) {
                               return (
-                                <h5 key={lidx} className="font-bold text-white text-xs mt-3 uppercase tracking-wider text-primary font-mono flex items-center gap-1">
+                                <h5 key={lidx} className="font-semibold text-foreground text-xs mt-3 uppercase tracking-wider text-primary font-mono flex items-center gap-1">
                                   <span>{renderCitations(cleanLine.replace("### ", ""))}</span>
                                 </h5>
                               );
                             }
                             if (cleanLine.startsWith("- ") || cleanLine.startsWith("* ")) {
                               return (
-                                <li key={lidx} className="list-disc pl-4 text-white/70 ml-1 leading-relaxed text-[11.5px]">
+                                <li key={lidx} className="list-disc pl-4 text-muted-foreground ml-1 leading-relaxed text-xs">
                                   {renderCitations(cleanLine.replace(/^[-*]\s+/, ""))}
                                 </li>
                               );
                             }
                             return (
-                              <p key={lidx} className="mb-2 last:mb-0 leading-relaxed text-[11.5px] text-white/80">
+                              <p key={lidx} className="mb-1.5 last:mb-0 leading-relaxed text-xs text-foreground/90">
                                 {renderCitations(cleanLine)}
                               </p>
                             );
                           })}
                         </div>
                       ) : (
-                        <p className="leading-relaxed text-[11.5px] text-white/95">{msg.content}</p>
+                        <p className="leading-relaxed text-xs text-foreground">{msg.content}</p>
                       )}
                     </div>
                   </div>
@@ -2496,11 +2491,11 @@ function StudySessionPanel({
                 {/* Active Real-Time Streaming Message Bubble */}
                 {streamingMessage !== null && streamingMessage.length > 0 && (
                   <div className="flex gap-3 text-xs leading-relaxed justify-start">
-                    <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center font-bold text-[9px] text-primary shrink-0 select-none font-mono">
+                    <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none font-mono">
                       AI
                     </div>
-                    <div className="rounded-2xl border px-3.5 py-3 max-w-[85%] text-left relative bg-[#0b0c11] border-white/5 text-white/95 rounded-tl-none">
-                      <div className="space-y-2.5">
+                    <div className="rounded-lg border border-border/60 bg-card p-3.5 max-w-[85%] text-left relative text-card-foreground shadow-xs">
+                      <div className="space-y-2">
                         {streamingMessage.split("\n").map((line, lidx, arr) => {
                           const isLastLine = lidx === arr.length - 1;
                           const cleanLine = line;
@@ -2509,7 +2504,7 @@ function StudySessionPanel({
                             return str.split(/(\*\*.*?\*\*)/g).map((p, j) => {
                               if (p.startsWith("**") && p.endsWith("**")) {
                                 return (
-                                  <strong key={j} className="font-semibold text-white">
+                                  <strong key={j} className="font-semibold text-foreground">
                                     {p.slice(2, -2)}
                                   </strong>
                                 );
@@ -2533,16 +2528,16 @@ function StudySessionPanel({
                                         setActiveSourcePreviewId(pdfSrc.id);
                                         setPdfViewMode("original");
                                         setPdfPageNum(page);
-                                        toast.success(`Jumping to original PDF: ${pdfSrc.title} (Page ${page})`);
+                                        toast.success(`Opening page ${page} in ${pdfSrc.title}`);
                                       } else {
-                                        toast.info(`Cited content excerpt page ${page}.`);
+                                        toast.info(`Source cited: Page ${page}`);
                                       }
                                     }}
-                                    className="mx-1 align-baseline inline-flex items-center gap-0.5 bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary text-[8.5px] rounded-full px-2 py-0.5 transition-all font-mono font-bold"
+                                    className="mx-1 align-baseline inline-flex items-center gap-1 bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary text-[10px] rounded px-1.5 py-0.5 transition-colors font-mono font-medium"
                                     title={`Jump to Page ${page}`}
                                   >
                                     <BookOpen className="h-2.5 w-2.5" />
-                                    <span>{page}</span>
+                                    <span>p.{page}</span>
                                   </button>
                                 );
                               }
@@ -2552,7 +2547,7 @@ function StudySessionPanel({
 
                           if (cleanLine.startsWith("### ")) {
                             return (
-                              <h5 key={lidx} className="font-bold text-white text-xs mt-3 uppercase tracking-wider text-primary font-mono flex items-center gap-1">
+                              <h5 key={lidx} className="font-semibold text-foreground text-xs mt-3 uppercase tracking-wider text-primary font-mono flex items-center gap-1">
                                 <span>{renderCitations(cleanLine.replace("### ", ""))}</span>
                                 {isLastLine && (
                                   <span className="inline-block w-1.5 h-3 bg-primary ml-1 animate-pulse align-middle rounded-xs" />
@@ -2562,7 +2557,7 @@ function StudySessionPanel({
                           }
                           if (cleanLine.startsWith("- ") || cleanLine.startsWith("* ")) {
                             return (
-                              <li key={lidx} className="list-disc pl-4 text-white/70 ml-1 leading-relaxed text-[11.5px]">
+                              <li key={lidx} className="list-disc pl-4 text-muted-foreground ml-1 leading-relaxed text-xs">
                                 {renderCitations(cleanLine.replace(/^[-*]\s+/, ""))}
                                 {isLastLine && (
                                   <span className="inline-block w-1.5 h-3 bg-primary ml-1 animate-pulse align-middle rounded-xs" />
@@ -2571,7 +2566,7 @@ function StudySessionPanel({
                             );
                           }
                           return (
-                            <p key={lidx} className="mb-2 last:mb-0 leading-relaxed text-[11.5px] text-white/80">
+                            <p key={lidx} className="mb-1.5 last:mb-0 leading-relaxed text-xs text-foreground/90">
                               {renderCitations(cleanLine)}
                               {isLastLine && (
                                 <span className="inline-block w-1.5 h-3 bg-primary ml-1 animate-pulse align-middle rounded-xs" />
@@ -2586,10 +2581,10 @@ function StudySessionPanel({
 
                 {(isBotTyping || (streamingMessage !== null && streamingMessage.length === 0)) && (
                   <div className="flex gap-3 text-xs justify-start items-center">
-                    <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center font-bold text-[9px] text-primary shrink-0 select-none animate-pulse font-mono">
+                    <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none animate-pulse font-mono">
                       AI
                     </div>
-                    <div className="rounded-2xl border border-white/5 bg-[#0b0c11] px-4 py-2.5 text-muted-foreground/60">
+                    <div className="rounded-lg border border-border/60 bg-card px-3.5 py-2 text-muted-foreground">
                       <span className="flex gap-1">
                         <span className="animate-bounce font-bold">.</span>
                         <span className="animate-bounce delay-100 font-bold">.</span>
@@ -2602,41 +2597,41 @@ function StudySessionPanel({
               </div>
 
               {/* Chat Input & Suggestions bar */}
-              <div className="border-t border-white/5 pt-3.5 bg-[#07080a] p-4.5 shrink-0">
-                <div className="flex flex-wrap gap-1.5 mb-3 select-none">
+              <div className="border-t border-border/60 pt-3 bg-card/40 p-4 shrink-0">
+                <div className="flex flex-wrap gap-1.5 mb-2.5 select-none">
                   <button
                     onClick={() => onSendMessage(undefined, "Generate FAQ with Q&A overview")}
-                    className="rounded-full bg-white/5 border border-white/5 px-3 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                    className="rounded-md bg-secondary/70 border border-border/60 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                   >
                     Generate FAQ
                   </button>
                   <button
                     onClick={() => onSendMessage(undefined, "Give me a Socratic practice question")}
-                    className="rounded-full bg-white/5 border border-white/5 px-3 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                    className="rounded-md bg-secondary/70 border border-border/60 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                   >
-                    Test Me
+                    Test My Knowledge
                   </button>
                   <button
                     onClick={() => onSendMessage(undefined, "Summarize key terms and equations")}
-                    className="rounded-full bg-white/5 border border-white/5 px-3 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                    className="rounded-md bg-secondary/70 border border-border/60 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                   >
-                    Glossary
+                    Terminology
                   </button>
                 </div>
 
                 <form
                   onSubmit={onSendMessage}
-                  className="flex gap-2 rounded-full border border-white/10 bg-[#0c0d12] px-3.5 py-1.5 items-center justify-between"
+                  className="flex gap-2 rounded-lg border border-border/70 bg-background px-3 py-1.5 items-center justify-between focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20"
                 >
                   <input
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Ask AI tutor anything about checked documents..."
-                    className="bg-transparent text-xs text-white outline-none w-full placeholder:text-muted-foreground/60 px-1"
+                    placeholder="Ask a question about the active materials..."
+                    className="bg-transparent text-xs text-foreground outline-none w-full placeholder:text-muted-foreground"
                   />
                   <button
                     type="submit"
-                    className="grid h-7.5 w-7.5 place-items-center rounded-full bg-white text-black hover:bg-white/95 active:scale-95 transition-all shrink-0"
+                    className="grid h-7 w-7 place-items-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-colors shrink-0"
                   >
                     <Send className="h-3.5 w-3.5" />
                   </button>
@@ -2647,19 +2642,19 @@ function StudySessionPanel({
         </div>
 
         {/* COLUMN 3: RIGHT PANEL: SYNTHESIS TAB SYSTEM (lg:col-span-4) */}
-        <div className="lg:col-span-4 flex flex-col bg-[#07080a] overflow-hidden">
+        <div className="lg:col-span-4 flex flex-col bg-background overflow-hidden">
           
           {/* Navigation Tab selection */}
-          <div className="flex items-center justify-between border-b border-white/5 bg-[#090a0f] px-3 py-2.5 shrink-0 select-none">
-            <div className="flex rounded-full bg-white/5 p-0.5 text-xs overflow-x-auto max-w-full">
+          <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-3 py-2 shrink-0 select-none">
+            <div className="flex rounded-lg bg-secondary/60 p-0.5 text-xs overflow-x-auto max-w-full border border-border/50 gap-0.5">
               
               <button
                 onClick={() => {
                   setActiveTab("pins");
                   setShowRightWelcome(false);
                 }}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 transition-all text-[9.5px] font-bold uppercase ${
-                  activeTab === "pins" ? "bg-white text-black font-extrabold shadow" : "text-muted-foreground hover:text-white"
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                  activeTab === "pins" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <Pin className="h-3 w-3" />
@@ -2671,8 +2666,8 @@ function StudySessionPanel({
                   setActiveTab("notes");
                   setShowRightWelcome(false);
                 }}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 transition-all text-[9.5px] font-bold uppercase ${
-                  activeTab === "notes" ? "bg-white text-black font-extrabold shadow" : "text-muted-foreground hover:text-white"
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                  activeTab === "notes" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <Edit2 className="h-3 w-3" />
@@ -2684,8 +2679,8 @@ function StudySessionPanel({
                   setActiveTab("briefing");
                   setShowRightWelcome(false);
                 }}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 transition-all text-[9.5px] font-bold uppercase ${
-                  activeTab === "briefing" ? "bg-white text-black font-extrabold shadow" : "text-muted-foreground hover:text-white"
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                  activeTab === "briefing" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <FileStack className="h-3 w-3" />
@@ -2697,12 +2692,12 @@ function StudySessionPanel({
                   setActiveTab("podcast");
                   setShowRightWelcome(false);
                 }}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 transition-all text-[9.5px] font-bold uppercase ${
-                  activeTab === "podcast" ? "bg-white text-black font-extrabold shadow" : "text-muted-foreground hover:text-white"
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                  activeTab === "podcast" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <Headphones className="h-3 w-3" />
-                <span>Podcast</span>
+                <span>Audio</span>
               </button>
 
               <button
@@ -2710,8 +2705,8 @@ function StudySessionPanel({
                   setActiveTab("flashcards");
                   setShowRightWelcome(false);
                 }}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 transition-all text-[9.5px] font-bold uppercase ${
-                  activeTab === "flashcards" ? "bg-white text-black font-extrabold shadow" : "text-muted-foreground hover:text-white"
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                  activeTab === "flashcards" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <Sparkles className="h-3 w-3" />
@@ -2723,8 +2718,8 @@ function StudySessionPanel({
                   setActiveTab("quiz");
                   setShowRightWelcome(false);
                 }}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 transition-all text-[9.5px] font-bold uppercase ${
-                  activeTab === "quiz" ? "bg-white text-black font-extrabold shadow" : "text-muted-foreground hover:text-white"
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                  activeTab === "quiz" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
                 }`}
               >
                 <BookOpen className="h-3 w-3" />
@@ -2735,12 +2730,12 @@ function StudySessionPanel({
           </div>
 
           {/* TAB CONTENTS CONTAINER */}
-          <div className="flex-1 overflow-y-auto p-4.5 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
             
             {/* A. PINS TAB (NOTEBOARD INDEX GRID) */}
             {activeTab === "pins" && (
               <div className="h-full flex flex-col justify-start">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-3 select-none">
+                <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-3 select-none">
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
                     Noteboard Index Cards
                   </span>
@@ -2748,35 +2743,35 @@ function StudySessionPanel({
                   {/* Custom pin adder */}
                   <button
                     onClick={() => setShowAddCard(!showAddCard)}
-                    className="text-[10px] font-bold text-primary flex items-center gap-0.5 hover:brightness-110 outline-none"
+                    className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Card
                   </button>
                 </div>
 
                 {showAddCard && (
-                  <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-left">
+                  <div className="mb-4 rounded-lg border border-border/70 bg-card p-3 text-left">
                     <textarea
                       value={customCardContent}
                       onChange={(e) => setCustomCardContent(e.target.value)}
-                      placeholder="Write custom facts, quotes, or study logs to pin..."
+                      placeholder="Write custom facts, key points, or formula definitions..."
                       rows={3}
-                      className="w-full bg-[#08090d] border border-white/5 rounded-lg p-2.5 text-xs text-white outline-none focus:border-primary resize-none font-medium"
+                      className="w-full bg-background border border-border/70 rounded-md p-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 resize-none"
                     />
-                    <div className="flex justify-end gap-1.5 mt-2 text-[9px]">
-                      <button onClick={() => setShowAddCard(false)} className="px-2.5 py-1 border border-white/5 rounded-full hover:bg-white/5">Cancel</button>
-                      <button onClick={addCustomCard} className="px-3 py-1 bg-primary text-primary-foreground font-bold rounded-full hover:brightness-110">Pin</button>
+                    <div className="flex justify-end gap-1.5 mt-2 text-xs">
+                      <button onClick={() => setShowAddCard(false)} className="px-2.5 py-1 border border-border/60 rounded-md hover:bg-secondary text-muted-foreground transition-colors">Cancel</button>
+                      <button onClick={addCustomCard} className="px-3 py-1 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors">Pin Card</button>
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6 text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pb-6 text-left">
                   {(!notebook.pinnedNotes || notebook.pinnedNotes.length === 0) && (
-                    <div className="col-span-full flex flex-col items-center justify-center py-12 opacity-35 text-center px-4">
-                      <Pin className="h-8 w-8 mb-2 text-white/10" />
-                      <p className="text-xs">Your noteboard is clean.</p>
-                      <p className="text-[9px] text-muted-foreground mt-0.5 leading-normal max-w-xs">
-                        Pin important AI answers by clicking the pin icon on chat bubbles, or click '+ Add Card' to write your own.
+                    <div className="col-span-full flex flex-col items-center justify-center py-12 opacity-40 text-center px-4">
+                      <Pin className="h-7 w-7 mb-2 text-muted-foreground" />
+                      <p className="text-xs text-foreground font-medium">Your noteboard is empty</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal max-w-xs">
+                        Pin important responses by clicking the pin icon on chat messages, or click '+ Add Card'.
                       </p>
                     </div>
                   )}
@@ -2784,16 +2779,15 @@ function StudySessionPanel({
                   {notebook.pinnedNotes?.map((pin) => (
                     <div
                       key={pin.id}
-                      className="relative group bg-white/[0.01] border border-white/5 rounded-xl p-3.5 hover:border-primary/20 transition-all flex flex-col justify-between h-36 relative overflow-hidden"
+                      className="group bg-card border border-border/60 rounded-lg p-3 hover:border-border transition-colors flex flex-col justify-between h-36 relative"
                     >
-                      <div className="absolute top-0 right-0 h-8 w-8 bg-primary/5 rounded-bl-full pointer-events-none" />
                       <button
                         onClick={() => deletePin(pin.id)}
-                        className="absolute top-2 right-2 text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1"
+                        className="absolute top-2 right-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 rounded hover:bg-secondary"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
-                      <div className="text-[10px] sm:text-[10.5px] text-white/85 pr-5 leading-normal overflow-y-auto scrollbar-none font-sans whitespace-pre-wrap flex-1 select-text">
+                      <div className="text-xs text-foreground/85 pr-5 leading-relaxed overflow-y-auto scrollbar-none font-sans whitespace-pre-wrap flex-1 select-text">
                         {pin.content}
                       </div>
                     </div>
@@ -2805,13 +2799,13 @@ function StudySessionPanel({
             {/* B. NOTES TAB (AUTOSAVING MARKDOWN EDITOR) */}
             {activeTab === "notes" && (
               <div className="h-full flex flex-col justify-start gap-3 text-left">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <div className="flex justify-between items-center border-b border-border/60 pb-2">
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
-                    Auto-Saved Study Notes
+                    Study Notes
                   </span>
                   <button
                     onClick={handleDownloadNotes}
-                    className="text-[10px] font-bold text-primary flex items-center gap-0.5 hover:brightness-110"
+                    className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors"
                   >
                     <Download className="h-3.5 w-3.5" /> Export TXT
                   </button>
@@ -2821,7 +2815,7 @@ function StudySessionPanel({
                   value={notebook.notes || ""}
                   onChange={(e) => onSaveNotes(e.target.value)}
                   placeholder="Summarize lessons, jot down exam formulations, or write active recall notes here. Auto-saved."
-                  className="w-full bg-[#08090d] border border-white/5 rounded-xl p-4 text-xs leading-relaxed text-white/90 placeholder:text-white/20 focus:border-primary/45 focus:outline-none resize-none font-medium min-h-[calc(100vh-14rem)]"
+                  className="w-full bg-card border border-border/60 rounded-lg p-3.5 text-xs font-mono leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 focus:outline-none resize-none min-h-[calc(100vh-14rem)]"
                 />
               </div>
             )}
@@ -2829,7 +2823,7 @@ function StudySessionPanel({
             {/* C. BRIEFING TAB */}
             {activeTab === "briefing" && (
               <div className="h-full flex flex-col justify-start text-left">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-4">
+                <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-4">
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
                     Executive Briefing Doc
                   </span>
@@ -2837,53 +2831,53 @@ function StudySessionPanel({
                     <button
                       onClick={generateBriefing}
                       disabled={isGeneratingBriefing}
-                      className="flex items-center gap-1 bg-primary hover:brightness-110 text-primary-foreground px-3 py-1.5 text-[9.5px] font-bold rounded-full transition-all shadow-[0_0_12px_oklch(0.82_0.14_160/0.2)]"
+                      className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
                     >
-                      <Sparkles className="h-3 w-3" />
-                      {isGeneratingBriefing ? "Compiling..." : "Compile Briefing"}
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>{isGeneratingBriefing ? "Compiling..." : "Compile Briefing"}</span>
                     </button>
                   )}
                 </div>
 
                 <div className="pb-6">
                   {!notebook.briefingDoc ? (
-                    <div className="flex flex-col items-center justify-center py-16 opacity-35 text-center px-4">
-                      <FileStack className="h-9 w-9 mb-3 text-white/10" />
-                      <p className="text-sm font-semibold">No Briefing compiled</p>
-                      <p className="text-[10px] text-muted-foreground mt-1 max-w-xs leading-normal">
-                        Click compile to auto-generate a beautiful structured study guide, glossaries, and FAQs summarizing all selected sources.
+                    <div className="flex flex-col items-center justify-center py-16 opacity-40 text-center px-4">
+                      <FileStack className="h-8 w-8 mb-2 text-muted-foreground" />
+                      <p className="text-xs font-medium text-foreground">No Briefing compiled</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xs leading-normal">
+                        Compile a structured study guide, executive summaries, and FAQs across all checked sources.
                       </p>
                     </div>
                   ) : (
-                    <div className="prose prose-invert prose-sm max-w-none text-white/80">
+                    <div className="prose prose-invert prose-sm max-w-none text-foreground/85">
                       {notebook.briefingDoc.split("\n").map((line, lidx) => {
                         if (line.startsWith("# "))
                           return (
-                            <h2 key={lidx} className="text-base font-extrabold text-white mb-4 mt-6 font-display border-b border-white/5 pb-2 uppercase tracking-wide">
+                            <h2 key={lidx} className="text-sm font-semibold text-foreground mb-3 mt-5 border-b border-border/60 pb-1.5">
                               {line.replace("# ", "")}
                             </h2>
                           );
                         if (line.startsWith("## "))
                           return (
-                            <h3 key={lidx} className="text-xs font-bold text-primary mb-3 mt-5 font-mono uppercase tracking-widest">
+                            <h3 key={lidx} className="text-xs font-mono font-semibold text-primary mb-2 mt-4 tracking-wide uppercase">
                               {line.replace("## ", "")}
                             </h3>
                           );
                         if (line.startsWith("### "))
                           return (
-                            <h4 key={lidx} className="text-xs font-bold text-white/95 mb-2 mt-4 leading-normal">
+                            <h4 key={lidx} className="text-xs font-medium text-foreground mb-1.5 mt-3">
                               {line.replace("### ", "")}
                             </h4>
                           );
                         if (line.startsWith("- "))
                           return (
-                            <li key={lidx} className="list-disc ml-4 my-1 text-xs text-white/70 leading-relaxed">
+                            <li key={lidx} className="list-disc ml-4 my-1 text-xs text-muted-foreground leading-relaxed">
                               {line.replace("- ", "")}
                             </li>
                           );
-                        if (line.trim() === "") return <div key={lidx} className="h-3" />;
+                        if (line.trim() === "") return <div key={lidx} className="h-2" />;
                         return (
-                          <p key={lidx} className="my-1.5 leading-relaxed text-xs text-white/75">
+                          <p key={lidx} className="my-1.5 leading-relaxed text-xs text-foreground/80">
                             {line}
                           </p>
                         );
@@ -2897,46 +2891,46 @@ function StudySessionPanel({
             {/* D. PODCAST TAB (AI AUDIO OVERVIEW STUDIO) */}
             {activeTab === "podcast" && (
               <div className="h-full flex flex-col justify-start text-left">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-4">
+                <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-4">
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
                     Audio Overview Studio
                   </span>
                   {notebook.audioScript && notebook.audioScript.length > 0 && (
                     <button
                       onClick={downloadPodcastScript}
-                      className="text-[10px] font-bold text-primary flex items-center gap-0.5 hover:brightness-110"
+                      className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors"
                     >
-                      <Download className="h-3 w-3" /> Get Script
+                      <Download className="h-3.5 w-3.5" /> Export Script
                     </button>
                   )}
                 </div>
 
-                <div className="space-y-5 pb-8">
+                <div className="space-y-4 pb-8">
                   {/* Configuration */}
-                  <div className="bg-[#0b0d12] border border-white/5 rounded-2xl p-4.5 space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5 font-mono">
+                  <div className="bg-card border border-border/60 rounded-lg p-4 space-y-3.5">
+                    <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <Headphones className="h-4 w-4 text-primary" />
                       <span>Episode Configuration</span>
                     </h4>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[8.5px] uppercase font-bold text-muted-foreground tracking-wider font-mono">Format</label>
+                        <label className="text-[10px] uppercase font-mono font-medium text-muted-foreground">Format</label>
                         <select
                           value={podcastFormat}
                           onChange={(e) => setPodcastFormat(e.target.value)}
-                          className="w-full bg-[#08090d] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-primary"
+                          className="w-full bg-background border border-border/70 rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         >
-                          <option value="two-hosts">Two Hosts (Banter)</option>
-                          <option value="single-host">Single Host</option>
+                          <option value="two-hosts">Two Hosts (Discussion)</option>
+                          <option value="single-host">Single Host (Monologue)</option>
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[8.5px] uppercase font-bold text-muted-foreground tracking-wider font-mono">Duration</label>
+                        <label className="text-[10px] uppercase font-mono font-medium text-muted-foreground">Duration</label>
                         <select
                           value={podcastDuration}
                           onChange={(e) => setPodcastDuration(e.target.value)}
-                          className="w-full bg-[#08090d] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-primary"
+                          className="w-full bg-background border border-border/70 rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         >
                           <option value="Short (~3 mins)">Short (~3m)</option>
                           <option value="Medium (~10 mins)">Medium (~10m)</option>
@@ -2944,11 +2938,11 @@ function StudySessionPanel({
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[8.5px] uppercase font-bold text-muted-foreground tracking-wider font-mono">Language</label>
+                        <label className="text-[10px] uppercase font-mono font-medium text-muted-foreground">Language</label>
                         <select
                           value={podcastLanguage}
                           onChange={(e) => setPodcastLanguage(e.target.value)}
-                          className="w-full bg-[#08090d] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-primary"
+                          className="w-full bg-background border border-border/70 rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         >
                           {Array.from(new Set(edgeVoices.map((v) => v.lang))).map((l) => (
                             <option key={l} value={l}>{l}</option>
@@ -2956,11 +2950,11 @@ function StudySessionPanel({
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[8.5px] uppercase font-bold text-muted-foreground tracking-wider font-mono">Host 1 Voice</label>
+                        <label className="text-[10px] uppercase font-mono font-medium text-muted-foreground">Host 1 Voice</label>
                         <select
                           value={voice1Name}
                           onChange={(e) => setVoice1Name(e.target.value)}
-                          className="w-full bg-[#08090d] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-primary"
+                          className="w-full bg-background border border-border/70 rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                         >
                           {edgeVoices.filter((v) => v.lang === podcastLanguage).map((v) => (
                             <option key={`v1-${v.id}`} value={v.id}>{v.name}</option>
@@ -2969,11 +2963,11 @@ function StudySessionPanel({
                       </div>
                       {podcastFormat === "two-hosts" && (
                         <div className="col-span-2 space-y-1">
-                          <label className="text-[8.5px] uppercase font-bold text-muted-foreground tracking-wider font-mono">Host 2 Voice</label>
+                          <label className="text-[10px] uppercase font-mono font-medium text-muted-foreground">Host 2 Voice</label>
                           <select
                             value={voice2Name}
                             onChange={(e) => setVoice2Name(e.target.value)}
-                            className="w-full bg-[#08090d] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-primary"
+                            className="w-full bg-background border border-border/70 rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                           >
                             {edgeVoices.filter((v) => v.lang === podcastLanguage).map((v) => (
                               <option key={`v2-${v.id}`} value={v.id}>{v.name}</option>
@@ -2983,66 +2977,66 @@ function StudySessionPanel({
                       )}
                     </div>
 
-                    <div className="space-y-1 pt-2 border-t border-white/5">
-                      <label className="text-[8.5px] uppercase font-bold text-muted-foreground tracking-wider font-mono">Custom Host Instructions</label>
+                    <div className="space-y-1 pt-2 border-t border-border/50">
+                      <label className="text-[10px] uppercase font-mono font-medium text-muted-foreground">Custom Instructions</label>
                       <textarea
                         value={podcastInstructions}
                         onChange={(e) => setPodcastInstructions(e.target.value)}
-                        placeholder="e.g. Focus on biology formulas, talk like hyper-caffeinated debate hosts..."
-                        className="w-full bg-[#08090d] border border-white/10 rounded-lg p-2.5 text-xs text-white outline-none focus:border-primary h-14 resize-none"
+                        placeholder="e.g. Focus on core formulas, clear academic explanations..."
+                        className="w-full bg-background border border-border/70 rounded-md p-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 h-14 resize-none"
                       />
                     </div>
 
                     <button
                       onClick={generatePodcast}
                       disabled={isGeneratingPodcast}
-                      className="w-full py-2 bg-primary hover:brightness-110 text-primary-foreground font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-[0_0_12px_oklch(0.82_0.14_160/0.2)]"
+                      className="w-full py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-xs rounded-md transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Sparkles className="h-3.5 w-3.5" />
-                      {isGeneratingPodcast ? "Compiling script..." : "Generate AI Podcast"}
+                      <span>{isGeneratingPodcast ? "Compiling script..." : "Generate Audio Overview"}</span>
                     </button>
                   </div>
 
                   {/* Playback scripts */}
                   {notebook.audioScript && notebook.audioScript.length > 0 && (
-                    <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 space-y-3">
+                    <div className="bg-secondary/30 border border-border/60 rounded-lg p-3.5 space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-white font-mono">Audio Overviews</span>
-                        <div className="flex gap-1.5 text-[9px]">
+                        <span className="text-xs font-semibold text-foreground">Audio Overview</span>
+                        <div className="flex gap-1.5 text-xs">
                           {playingAudioIdx >= 0 ? (
-                            <button onClick={stopPodcast} className="bg-white text-black px-2.5 py-1 rounded-full font-bold flex items-center gap-1"><Pause className="h-2.5 w-2.5 fill-current" /> Stop</button>
+                            <button onClick={stopPodcast} className="bg-destructive text-destructive-foreground px-3 py-1 rounded-md font-medium flex items-center gap-1"><Pause className="h-3 w-3 fill-current" /> Stop</button>
                           ) : (
-                            <button onClick={playPodcast} className="bg-white text-black px-3 py-1.5 rounded-full font-bold flex items-center gap-1"><Play className="h-2.5 w-2.5 fill-current" /> Listen</button>
+                            <button onClick={playPodcast} className="bg-primary text-primary-foreground px-3 py-1 rounded-md font-medium flex items-center gap-1 hover:bg-primary/90"><Play className="h-3 w-3 fill-current" /> Play</button>
                           )}
                           <a
                             href={`${FASTAPI_BASE_URL}/tts-full/${notebook.id}?voice1=${voice1Name}&voice2=${voice2Name}`}
                             download
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-[#0b0d12] text-white/85 px-2.5 py-1 border border-white/10 rounded-full font-semibold hover:border-primary/40"
+                            className="bg-card text-foreground px-2.5 py-1 border border-border/70 rounded-md font-medium hover:bg-secondary text-xs transition-colors"
                           >
-                            Get MP3
+                            MP3
                           </a>
                         </div>
                       </div>
 
                       {playingAudioIdx >= 0 && (
-                        <div className="flex items-center justify-center gap-0.5 py-3 bg-black/45 rounded-lg border border-white/[0.03]">
-                          {Array.from({ length: 12 }).map((_, i) => (
+                        <div className="flex items-center justify-center gap-1 py-2.5 bg-background/80 rounded-md border border-border/50">
+                          {Array.from({ length: 16 }).map((_, i) => (
                             <div
                               key={i}
-                              className="w-0.5 rounded-full bg-primary"
+                              className="w-1 rounded-full bg-primary"
                               style={{
-                                height: `${Math.floor(Math.random() * 18) + 4}px`,
+                                height: `${Math.floor(Math.random() * 16) + 4}px`,
                                 animation: "pulse 1s ease-in-out infinite",
-                                animationDelay: `${i * 0.08}s`,
+                                animationDelay: `${i * 0.06}s`,
                               }}
                             />
                           ))}
                         </div>
                       )}
 
-                      <div className="bg-[#08090c] p-3.5 rounded-xl border border-white/5 max-h-52 overflow-y-auto scrollbar-thin space-y-3">
+                      <div className="bg-background p-3 rounded-md border border-border/60 max-h-52 overflow-y-auto scrollbar-thin space-y-2">
                         {notebook.audioScript.map((line, idx) => {
                           let displaySpeaker = line.speaker;
                           if (line.speaker === "Alex") {
@@ -3051,8 +3045,8 @@ function StudySessionPanel({
                             displaySpeaker = edgeVoices.find((v) => v.id === voice2Name)?.name?.split(" ")[0] || "Host 2";
                           }
                           return (
-                            <p key={idx} className="text-white/80 text-[11px] leading-relaxed">
-                              <strong className="text-primary mr-1">{displaySpeaker}:</strong>
+                            <p key={idx} className="text-foreground/80 text-xs leading-relaxed">
+                              <strong className="text-primary mr-1.5 font-mono">{displaySpeaker}:</strong>
                               {line.text}
                             </p>
                           );
@@ -3067,24 +3061,24 @@ function StudySessionPanel({
             {/* E. FLASHCARDS TAB (Recall Cards) */}
             {activeTab === "flashcards" && (
               <div className="h-full flex flex-col justify-start text-center">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-4 text-left">
+                <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-4 text-left">
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
                     Recall Flashcards
                   </span>
-                  <span className="text-[9.5px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] font-mono font-medium text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
                     {activeFlashcards.length} Cards
                   </span>
                 </div>
 
                 {activeFlashcards.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 opacity-35 px-4">
-                    <Sparkles className="h-9 w-9 mb-2 text-white/10" />
-                    <p className="text-xs">No active flashcards.</p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">Check at least one active source on the Left checklist to generate cards.</p>
+                  <div className="flex flex-col items-center justify-center py-16 opacity-40 px-4">
+                    <Sparkles className="h-8 w-8 mb-2 text-muted-foreground" />
+                    <p className="text-xs font-medium text-foreground">No active flashcards</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Check at least one active source on the left to review cards.</p>
                   </div>
                 ) : (
                   <div className="flex flex-col justify-between">
-                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest mb-3">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3">
                       Card {flashcardIdx + 1} of {activeFlashcards.length}
                     </div>
 
@@ -3096,22 +3090,22 @@ function StudySessionPanel({
                       <div className={`relative w-full h-full duration-500 transform-style-3d ${isFlipped ? "rotate-y-180" : ""}`}>
                         
                         {/* FRONT */}
-                        <div className="absolute inset-0 backface-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0c0d12] to-card p-5 flex flex-col justify-between shadow-xl">
-                          <span className="text-[8.5px] font-mono text-primary font-bold uppercase tracking-wider bg-primary/10 border border-primary/10 px-2 py-0.5 rounded self-start">Active Recall</span>
-                          <div className="my-auto py-1 text-center text-xs md:text-sm font-semibold leading-relaxed text-white">
+                        <div className="absolute inset-0 backface-hidden rounded-xl border border-border/70 bg-card p-5 flex flex-col justify-between shadow-xs">
+                          <span className="text-[10px] font-mono text-primary font-semibold uppercase tracking-wider bg-primary/10 border border-primary/20 px-2 py-0.5 rounded self-start">Prompt</span>
+                          <div className="my-auto py-1 text-center text-xs md:text-sm font-medium leading-relaxed text-card-foreground">
                             {currentFlashcard.question}
                           </div>
-                          <div className="text-[9px] font-mono text-muted-foreground/60 border-t border-white/5 pt-2">Click to flip card</div>
+                          <div className="text-[10px] font-mono text-muted-foreground border-t border-border/50 pt-2">Click to flip card</div>
                         </div>
 
                         {/* BACK */}
-                        <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl border border-primary/20 bg-gradient-to-br from-[#080d0b] to-[#0c0d12] p-5 flex flex-col justify-between shadow-xl">
-                          <span className="text-[8.5px] font-mono text-green-400 font-bold uppercase tracking-wider bg-green-500/10 border border-green-500/10 px-2 py-0.5 rounded self-start">Answer</span>
-                          <div className="my-auto py-1 text-center text-[10.5px] md:text-xs font-medium leading-relaxed text-white/90 overflow-y-auto max-h-24 scrollbar-none select-text">
+                        <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-xl border border-primary/30 bg-card p-5 flex flex-col justify-between shadow-xs">
+                          <span className="text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded self-start">Answer</span>
+                          <div className="my-auto py-1 text-center text-xs font-medium leading-relaxed text-foreground overflow-y-auto max-h-24 scrollbar-none select-text">
                             {currentFlashcard.answer}
                           </div>
                           {currentFlashcard.hint && currentFlashcard.hint !== "N/A" && (
-                            <div className="text-[9px] text-muted-foreground italic text-left bg-white/[0.01] p-1.5 rounded border border-white/[0.03] mt-1 select-text">
+                            <div className="text-[10px] text-muted-foreground italic text-left bg-secondary/40 p-1.5 rounded border border-border/40 mt-1 select-text">
                               💡 Hint: {currentFlashcard.hint}
                             </div>
                           )}
@@ -3121,7 +3115,7 @@ function StudySessionPanel({
                     </div>
 
                     {/* Flashcard Response controls */}
-                    <div className="mt-6 flex gap-2.5 max-w-[280px] mx-auto w-full">
+                    <div className="mt-5 flex gap-2.5 max-w-[280px] mx-auto w-full">
                       <button
                         onClick={() => {
                           setFlashcardLog(prev => ({ ...prev, [flashcardIdx]: "review" }));
@@ -3132,9 +3126,9 @@ function StudySessionPanel({
                             toast.info("Completed recall deck cram session!");
                           }
                         }}
-                        className={`flex-1 rounded-xl border py-2 text-[10px] font-bold transition-all outline-none ${flashcardLog[flashcardIdx] === "review" ? "bg-red-500/15 border-red-500/30 text-red-300" : "border-white/10 text-white/80 hover:bg-white/5"}`}
+                        className={`flex-1 rounded-md border py-2 text-xs font-medium transition-colors outline-none ${flashcardLog[flashcardIdx] === "review" ? "bg-destructive/15 border-destructive/30 text-destructive" : "border-border/70 text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
                       >
-                        Review later
+                        Review Later
                       </button>
                       <button
                         onClick={() => {
@@ -3146,21 +3140,21 @@ function StudySessionPanel({
                             toast.success("Mastered entire active recall deck!");
                           }
                         }}
-                        className={`flex-1 rounded-xl border py-2 text-[10px] font-bold transition-all outline-none ${flashcardLog[flashcardIdx] === "got" ? "bg-green-500/15 border-green-500/30 text-green-300" : "border-white/10 text-white/80 hover:bg-white/5"}`}
+                        className={`flex-1 rounded-md border py-2 text-xs font-medium transition-colors outline-none ${flashcardLog[flashcardIdx] === "got" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 font-semibold" : "border-border/70 text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
                       >
-                        Got it!
+                        Mastered
                       </button>
                     </div>
 
                     {/* Steppers */}
-                    <div className="mt-4 flex items-center justify-between max-w-[220px] mx-auto w-full select-none">
+                    <div className="mt-4 flex items-center justify-between max-w-[200px] mx-auto w-full select-none">
                       <button
                         disabled={flashcardIdx === 0}
                         onClick={() => {
                           setIsFlipped(false);
                           setTimeout(() => setFlashcardIdx(flashcardIdx - 1), 150);
                         }}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 disabled:opacity-30 hover:bg-white/10 transition-colors"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-secondary/50 disabled:opacity-30 hover:bg-secondary transition-colors"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
@@ -3171,9 +3165,9 @@ function StudySessionPanel({
                           setFlashcardLog({});
                           toast.info("Deck reset");
                         }}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-white"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                       >
-                        <RotateCcw className="h-3 w-3" />
+                        <RotateCcw className="h-3.5 w-3.5" />
                       </button>
                       <button
                         disabled={flashcardIdx === activeFlashcards.length - 1}
@@ -3181,7 +3175,7 @@ function StudySessionPanel({
                           setIsFlipped(false);
                           setTimeout(() => setFlashcardIdx(flashcardIdx + 1), 150);
                         }}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 disabled:opacity-30 hover:bg-white/10 transition-colors"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-secondary/50 disabled:opacity-30 hover:bg-secondary transition-colors"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </button>
@@ -3194,45 +3188,45 @@ function StudySessionPanel({
             {/* F. QUIZ TAB (Practice Quiz) */}
             {activeTab === "quiz" && (
               <div className="h-full flex flex-col justify-start text-left">
-                <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-4 select-none">
+                <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-4 select-none">
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
                     Socratic Quizzes
                   </span>
-                  <span className="text-[9.5px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] font-mono font-medium text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
                     {activeQuiz.length} Questions
                   </span>
                 </div>
 
                 {activeQuiz.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 opacity-35 text-center px-4">
-                    <BookOpen className="h-9 w-9 mb-2 text-white/10" />
-                    <p className="text-xs">No quizzes available.</p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">Check active sources on the Left checklist to load quizzes.</p>
+                  <div className="flex flex-col items-center justify-center py-16 opacity-40 text-center px-4">
+                    <BookOpen className="h-8 w-8 mb-2 text-muted-foreground" />
+                    <p className="text-xs font-medium text-foreground">No quizzes available</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Check active sources on the left checklist to load practice quizzes.</p>
                   </div>
                 ) : (
-                  <div className="space-y-5 pb-8">
+                  <div className="space-y-4 pb-8">
                     {activeQuiz.map((q, qIdx) => {
                       const isAnswered = quizAnswers[qIdx] !== undefined;
                       const selectedAnswer = quizAnswers[qIdx];
                       return (
-                        <div key={qIdx} className="rounded-xl border border-white/5 bg-white/[0.01] p-4 text-left">
-                          <span className="text-[8.5px] font-bold text-primary uppercase font-mono tracking-wider">
+                        <div key={qIdx} className="rounded-lg border border-border/60 bg-card p-3.5 text-left">
+                          <span className="text-[10px] font-mono font-semibold text-primary uppercase tracking-wider">
                             Question {qIdx + 1}
                           </span>
-                          <p className="mt-1 text-xs font-semibold leading-relaxed text-white">
+                          <p className="mt-1 text-xs font-medium leading-relaxed text-foreground">
                             {q.question}
                           </p>
 
-                          <div className="mt-3.5 space-y-1.5">
+                          <div className="mt-3 space-y-1.5">
                             {q.options.map((opt, optIdx) => {
-                              let btnClass = "border-white/5 bg-white/[0.01] hover:bg-white/5 text-white/80";
+                              let btnClass = "border-border/60 bg-background hover:bg-secondary/70 text-foreground/90";
                               if (isAnswered) {
                                 if (optIdx === q.answer) {
-                                  btnClass = "bg-green-500/15 border-green-500/30 text-green-300 font-semibold";
+                                  btnClass = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium";
                                 } else if (selectedAnswer === optIdx) {
-                                  btnClass = "bg-red-500/15 border-red-500/30 text-red-300 font-semibold";
+                                  btnClass = "bg-destructive/10 border-destructive/30 text-destructive font-medium";
                                 } else {
-                                  btnClass = "border-white/5 bg-white/[0.005] text-white/25 cursor-default";
+                                  btnClass = "border-border/40 bg-background/50 text-muted-foreground/40 cursor-default";
                                 }
                               }
                               return (
@@ -3247,7 +3241,7 @@ function StudySessionPanel({
                                       toast.error(`Incorrect! Question ${qIdx + 1}`);
                                     }
                                   }}
-                                  className={`w-full rounded-xl border px-3 py-2 text-left text-[11px] transition-all ${btnClass}`}
+                                  className={`w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${btnClass}`}
                                 >
                                   {opt}
                                 </button>
@@ -3258,13 +3252,13 @@ function StudySessionPanel({
                       );
                     })}
 
-                    <div className="text-center pt-2 border-t border-white/5">
+                    <div className="text-center pt-2 border-t border-border/50">
                       <button
                         onClick={() => {
                           setQuizAnswers({});
-                          toast.info("Quiz reset!");
+                          toast.info("Quiz reset");
                         }}
-                        className="rounded-full border border-white/10 px-4 py-1.5 text-[9px] font-bold text-white hover:bg-white/5"
+                        className="rounded-md border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                       >
                         Reset quiz answers
                       </button>

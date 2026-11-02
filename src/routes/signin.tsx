@@ -15,11 +15,11 @@ export const Route = createFileRoute("/signin")({
 });
 
 const quotes = [
-  "If you can't memorize the syllabus, let our AI do it. No cap.",
-  "Swapping 2 A.M. library panic for a solid 8 hours of sleep.",
-  "Built for students who are 99% caffeine and 1% hope.",
-  "Because ChatGPT hallucinated your entire biology midterm.",
-  "Study like a god. Even if you started 4 hours before the exam.",
+  "Active recall and spaced repetition produce significantly higher retention than passive rereading.",
+  "Grounding study sessions in primary sources eliminates hallucinated facts and unsupported claims.",
+  "Synthesize textbooks, lecture slides, and research in a single focused workspace.",
+  "Target your weakest knowledge areas with adaptive testing calibrated to memory decay curves.",
+  "Spend less time organizing notes and more time practicing deliberate retrieval.",
 ];
 
 function SignInPage() {
@@ -144,83 +144,81 @@ function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 flex items-center justify-center p-4">
-      {/* Visual background elements */}
-      <div className="absolute top-0 right-0 h-[400px] w-[400px] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 h-[300px] w-[300px] bg-indigo-500/5 rounded-full blur-[80px] pointer-events-none" />
-
-      <div className="w-full max-w-[1000px] grid grid-cols-1 md:grid-cols-2 rounded-2xl border border-white/10 bg-[#0d0e12] overflow-hidden shadow-2xl relative">
-        {/* Left Column: Visual panel with dynamic quote */}
-        <div className="relative hidden md:flex flex-col justify-between p-10 bg-[#090a0d] border-r border-white/5 overflow-hidden">
-          {/* Animated decorative grid lines */}
-          <div
-            className="absolute inset-0 opacity-[0.03] pointer-events-none"
-            style={{
-              backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
-            }}
-          />
-
-          <Link to="/" className="flex items-center gap-2 relative z-10 self-start">
-            <div className="grid h-6 w-6 place-items-center rounded-lg bg-primary/20 border border-primary/30">
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-[960px] grid grid-cols-1 md:grid-cols-2 rounded-xl border border-border bg-card overflow-hidden shadow-2xl relative">
+        {/* Left Column: Studio Insights & Value Preview */}
+        <div className="relative hidden md:flex flex-col justify-between p-10 bg-secondary/30 border-r border-border overflow-hidden">
+          <Link to="/" className="flex items-center gap-2.5 relative z-10 self-start">
+            <div className="grid h-7 w-7 place-items-center rounded-md bg-primary/15 border border-primary/25">
               <div
                 className="h-3 w-3 rotate-45 bg-primary"
                 style={{ clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)" }}
               />
             </div>
-            <span className="font-display text-lg font-bold text-white tracking-tight">LearnX</span>
+            <span className="font-display text-lg font-bold text-foreground tracking-tight">LearnX</span>
           </Link>
 
-          {/* Center glowing orb mockup */}
-          <div className="relative my-auto py-12 flex flex-col items-center">
-            <div className="absolute w-48 h-48 rounded-full bg-primary/10 blur-3xl animate-pulse" />
-            <div className="relative w-36 h-36 rounded-2xl bg-gradient-to-br from-primary/15 to-transparent border border-primary/20 flex flex-col justify-around p-4 shadow-xl backdrop-blur-md">
-              <Sparkles className="h-6 w-6 text-primary animate-pulse" />
-              <div className="space-y-1 text-left">
-                <span className="text-[9px] font-mono text-primary font-semibold uppercase tracking-wider">
-                  Indexed Database
+          {/* Structured Workspace Preview Card */}
+          <div className="relative my-auto py-8">
+            <div className="rounded-lg border border-border bg-card/80 p-5 shadow-sm space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono text-primary font-semibold uppercase tracking-wider bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                  Grounded Workspace
                 </span>
-                <p className="text-xs font-semibold text-white/90 truncate">
-                  Biology_midterm_cram.pdf
+                <span className="text-[10px] text-muted-foreground font-mono">3 sources indexed</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground truncate">
+                  Molecular_Biochemistry_Core.pdf
                 </p>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                  Active recall synthesis with grounded citation markers and spaced repetition practice sets.
+                </p>
+              </div>
+              <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  36 Active Cards
+                </span>
+                <span className="font-mono">100% Verified</span>
               </div>
             </div>
           </div>
 
-          {/* Dynamic rotating student quotes */}
-          <div className="relative z-10 text-left min-h-[80px] flex flex-col justify-end">
-            <p className="text-sm font-medium text-white/80 leading-relaxed transition-all duration-500 ease-in-out">
+          {/* Dynamic rotating research insight */}
+          <div className="relative z-10 text-left min-h-[72px] flex flex-col justify-end border-t border-border/60 pt-4">
+            <p className="text-xs font-medium text-foreground/80 leading-relaxed transition-all duration-300">
               "{quotes[quoteIdx]}"
             </p>
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mt-2 block">
-              — Night Before Exams
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mt-1.5 block">
+              Cognitive Learning Principles
             </span>
           </div>
         </div>
 
         {/* Right Column: Ingest auth form */}
-        <div className="flex flex-col justify-center p-8 md:p-12">
+        <div className="flex flex-col justify-center p-8 sm:p-12">
           <div className="w-full max-w-sm mx-auto">
             <Link
               to="/"
-              className="mb-6 inline-flex items-center gap-1 text-xs text-primary hover:underline self-start"
+              className="mb-6 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors self-start"
             >
               <ChevronLeft className="h-3.5 w-3.5" /> Back to home
             </Link>
 
-            <h2 className="text-2xl font-bold text-white text-left tracking-tight">
-              {isSignUp ? "Create your workspace" : "Welcome back, crammer"}
+            <h2 className="text-2xl font-bold text-foreground text-left tracking-tight font-display">
+              {isSignUp ? "Create your workspace" : "Sign in to LearnX"}
             </h2>
-            <p className="mt-1.5 text-xs text-muted-foreground text-left italic">
+            <p className="mt-1 text-xs text-muted-foreground text-left">
               {isSignUp
-                ? "Join thousands of students saving their GPA"
-                : "Your study database starts here"}
+                ? "Enter your details to create an account and start studying."
+                : "Enter your credentials to access your study notebooks."}
             </p>
 
             <button
               onClick={handleGoogleSignIn}
               disabled={isLoading}
-              className="mt-8 flex w-full items-center justify-center gap-3 rounded-full bg-white/5 border border-white/10 px-6 py-2.5 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-50 transition-all outline-none"
+              className="mt-6 flex w-full items-center justify-center gap-2.5 rounded-md bg-secondary/60 border border-border px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary transition-all outline-none disabled:opacity-50"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24">
                 <path
@@ -240,59 +238,58 @@ function SignInPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"
                 />
               </svg>
-              Google
+              <span>Continue with Google</span>
             </button>
 
-            <div className="my-6 flex items-center gap-3 text-[10px] uppercase font-mono tracking-widest text-muted-foreground">
-              <div className="h-px flex-1 bg-white/5" /> or{" "}
-              <div className="h-px flex-1 bg-white/5" />
+            <div className="my-5 flex items-center gap-3 text-[10px] uppercase font-mono tracking-widest text-muted-foreground">
+              <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
             </div>
 
-            <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
+            <form onSubmit={handleEmailAuth} className="space-y-3.5 text-left">
               <div>
-                <label className="text-xs font-semibold text-white/80">Email address</label>
+                <label className="text-xs font-medium text-foreground">Email address</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@university.edu"
-                  className="mt-1.5 w-full rounded-lg bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-white/20"
+                  className="mt-1 w-full rounded-md bg-secondary/30 border border-input px-3 py-2 text-xs text-foreground outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all placeholder:text-muted-foreground/50"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-white/80">Password</label>
+                <label className="text-xs font-medium text-foreground">Password</label>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="mt-1.5 w-full rounded-lg bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-white/20"
+                  className="mt-1 w-full rounded-md bg-secondary/30 border border-input px-3 py-2 text-xs text-foreground outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all placeholder:text-muted-foreground/50"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-50 transition-all outline-none"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 active:scale-[0.99] disabled:opacity-50 transition-all outline-none"
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <ShieldCheck className="h-4 w-4" />
                 )}
-                {isSignUp ? "Register account" : "Log in"}
+                <span>{isSignUp ? "Create Workspace Account" : "Sign In"}</span>
               </button>
             </form>
 
-            <p className="mt-8 text-center text-xs text-muted-foreground">
-              {isSignUp ? "Already have an account?" : "Need to save your grades?"}{" "}
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              {isSignUp ? "Already have an account?" : "Need an account?"}{" "}
               <button
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="font-semibold text-primary hover:underline outline-none focus:outline-none"
+                className="font-medium text-primary hover:underline outline-none"
               >
-                {isSignUp ? "Sign In" : "Register Now"}
+                {isSignUp ? "Sign In" : "Register now"}
               </button>
             </p>
           </div>

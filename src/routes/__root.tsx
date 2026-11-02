@@ -32,7 +32,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
 
@@ -72,16 +72,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "LearnX — The AI study assistant that turns chaos into preparation" },
+      { title: "LearnX — Intelligent Study Workspace & Active Recall Platform" },
       {
         name: "description",
         content:
-          "Upload your files. Let AI handle the teaching & preparation. LearnX turns 800-page PDFs, YouTube lectures and messy notes into flashcards, quizzes and mind maps in seconds.",
+          "Transform lecture recordings, textbooks, and research into interactive study guides, active recall flashcards, and verified quiz assessments.",
       },
-      { property: "og:title", content: "LearnX — Study smarter, not harder" },
+      { property: "og:title", content: "LearnX — Intelligent Study Workspace" },
       {
         property: "og:description",
-        content: "The AI study assistant that turns chaos into preparation.",
+        content:
+          "Transform course materials and research into structured study sessions and active recall decks.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
