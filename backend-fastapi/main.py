@@ -1983,6 +1983,6 @@ async def tutor_get_latest_session_endpoint(item_id: str):
             conn.close()
 
 if __name__ == "__main__":
-    port = int(os.getenv("FASTAPI_PORT") or (os.getenv("PORT") if os.getenv("RENDER") else 8000))
+    port = int(os.getenv("PORT") or os.getenv("FASTAPI_PORT") or 8000)
     is_dev = os.getenv("ENVIRONMENT", "development").lower() == "development"
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=is_dev)
