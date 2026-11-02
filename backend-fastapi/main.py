@@ -52,12 +52,15 @@ def health():
 
 # Database Configuration
 DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ultralearn")
-if "db.peafnjhrzfetfwlksysq.supabase.co" in DB_URL:
-    DB_URL = (
-        DB_URL.replace("db.peafnjhrzfetfwlksysq.supabase.co:5432", "aws-1-ap-northeast-2.pooler.supabase.com:6543")
-        .replace("db.peafnjhrzfetfwlksysq.supabase.co", "aws-1-ap-northeast-2.pooler.supabase.com")
-        .replace("postgres:", "postgres.peafnjhrzfetfwlksysq:")
-    )
+try:
+    _u = urlparse(DB_URL)
+    if _u.hostname and "peafnjhrzfetfwlksysq.supabase.co" in _u.hostname:
+        _user = f"{_u.username}.peafnjhrzfetfwlksysq" if _u.username and not _u.username.endswith("peafnjhrzfetfwlksysq") else _u.username
+        _auth = f"{_user}:{_u.password}@" if _u.password else f"{_user}@"
+        _netloc = f"{_auth}aws-1-ap-northeast-2.pooler.supabase.com:6543"
+        DB_URL = urlunparse((_u.scheme, _netloc, _u.path, _u.params, _u.query, _u.fragment))
+except Exception as _e:
+    print(f"[WARNING] Database URL parse fallback: {_e}")
 
 def validate_uuid_string(uuid_str: str):
     """

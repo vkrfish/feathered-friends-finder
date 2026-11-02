@@ -74,11 +74,18 @@ let connectionString =
 // Fix for Render / IPv6-unfriendly environments:
 // Direct Supabase host db.<ref>.supabase.co is IPv6 only and fails with ENETUNREACH on Render.
 // Automatically rewrite direct host to IPv4 connection pooler.
-if (connectionString.includes("db.peafnjhrzfetfwlksysq.supabase.co")) {
-  connectionString = connectionString
-    .replace("db.peafnjhrzfetfwlksysq.supabase.co:5432", "aws-1-ap-northeast-2.pooler.supabase.com:6543")
-    .replace("db.peafnjhrzfetfwlksysq.supabase.co", "aws-1-ap-northeast-2.pooler.supabase.com")
-    .replace("postgres:", "postgres.peafnjhrzfetfwlksysq:");
+try {
+  const dbUrl = new URL(connectionString);
+  if (dbUrl.hostname.includes("peafnjhrzfetfwlksysq.supabase.co")) {
+    dbUrl.hostname = "aws-1-ap-northeast-2.pooler.supabase.com";
+    dbUrl.port = "6543";
+    if (dbUrl.username === "postgres") {
+      dbUrl.username = "postgres.peafnjhrzfetfwlksysq";
+    }
+    connectionString = dbUrl.toString();
+  }
+} catch (e) {
+  // If connectionString is not a standard URL, keep original
 }
 
 const pool = new Pool({
@@ -177,7 +184,12 @@ const verifyItemOwnership = async (req, res, next) => {
     // 1. Verify primary item ownership
     const r = await pool.query("SELECT profile_id FROM public.study_items WHERE id = $1", [id]);
     if (r.rows.length === 0) {
-      return res.status(404).json({ error: "Item not found" });
+      // Auto-provision notebook if it was created client-side so user is never blocked
+      await pool.query(
+        "INSERT INTO public.study_items (id, title, kind, profile_id) VALUES ($1, $2, 'notebook', $3) ON CONFLICT (id) DO NOTHING",
+        [id, "Study Workspace", req.user.id],
+      );
+      return next();
     }
     const profileId = r.rows[0].profile_id;
     if (profileId !== req.user.id) {
@@ -666,7 +678,19 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
     const title = `Learning Session - ${dateStr}`;
 
     // 1. Create Study Item with profile_id and file_data
-    const notebookId = req.body.notebook_id || req.body.notebookId || null;
+    let notebookId = req.body.notebook_id || req.body.notebookId || null;
+    if (notebookId && isUuid(notebookId)) {
+      const nbCheck = await pool.query("SELECT id FROM public.study_items WHERE id = $1", [notebookId]);
+      if (nbCheck.rows.length === 0) {
+        await pool.query(
+          "INSERT INTO public.study_items (id, title, kind, profile_id) VALUES ($1, $2, 'notebook', $3) ON CONFLICT (id) DO NOTHING",
+          [notebookId, "Study Workspace", req.user.id],
+        );
+      }
+    } else {
+      notebookId = null;
+    }
+
     const itemRes = await pool.query(
       "INSERT INTO public.study_items (title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
       [title, "pdf", req.file.originalname, req.user.id, req.file.buffer, notebookId],
