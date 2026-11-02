@@ -2,8 +2,13 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../integrations/supabase/client";
 
-const API_BASE_URL = (import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:3001").replace(/\/+$/, "");
-const FASTAPI_BASE_URL = (import.meta.env.VITE_FASTAPI_URL || "http://localhost:8000").replace(/\/+$/, "");
+const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+const API_BASE_URL = (
+  (isLocal ? (import.meta.env.VITE_LOCAL_API_GATEWAY_URL || "http://localhost:3001") : (import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:3001"))
+).replace(/\/+$/, "");
+const FASTAPI_BASE_URL = (
+  (isLocal ? (import.meta.env.VITE_LOCAL_FASTAPI_URL || "http://localhost:8000") : (import.meta.env.VITE_FASTAPI_URL || "http://localhost:8000"))
+).replace(/\/+$/, "");
 
 // Authenticated fetch helper
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
@@ -47,6 +52,10 @@ import {
   ChevronRight,
   ChevronLeft,
   Check,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
   Download,
   Trash2,
   Pause,
@@ -54,6 +63,11 @@ import {
   ArrowUp,
   Globe,
   Pin,
+  GraduationCap,
+  Lightbulb,
+  Eye,
+  Clock,
+  HelpCircle,
   Headphones,
   FileStack,
 } from "lucide-react";
@@ -123,13 +137,27 @@ export default function DashboardPage() {
   // Check user session and fetch profile
   useEffect(() => {
     const checkUserSession = async () => {
-      const {
+      let {
         data: { session: activeSession },
       } = await supabase.auth.getSession();
-      if (!activeSession) {
-        if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
-          return;
+
+      if (!activeSession && typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { data } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (data?.session) {
+            activeSession = data.session;
+            window.history.replaceState(null, "", window.location.pathname);
+          }
         }
+      }
+
+      if (!activeSession) {
         toast.error("Please sign in to access your workspace.");
         navigate({ to: "/signin" });
         return;
@@ -950,6 +978,7 @@ export default function DashboardPage() {
       {/* 2. ACTIVE NOTEBOOK WORKSPACE */}
       {activeNotebookId && activeNotebook ? (
         <StudySessionPanel
+          session={session}
           notebook={activeNotebook}
           sources={sources}
           selectedSourceIds={selectedSourceIds}
@@ -1250,6 +1279,101 @@ export default function DashboardPage() {
 }
 
 // =============================================================
+// RAG QUIZ GENERATOR DATA MODELS
+// =============================================================
+interface RagQuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  source_reference?: {
+    chunk_id?: number | string;
+    page_number?: number;
+    quote_snippet?: string;
+  };
+}
+
+interface RagQuizResultItem {
+  id: string;
+  question: string;
+  options: string[];
+  user_answer: number | null;
+  correct_answer: number;
+  is_correct: boolean;
+  explanation: string;
+  source_reference?: {
+    chunk_id?: number | string;
+    page_number?: number;
+    quote_snippet?: string;
+  };
+}
+
+interface RagQuizEvaluation {
+  score: number;
+  total_questions: number;
+  percentage: number;
+  results: RagQuizResultItem[];
+}
+
+// =============================================================
+// TUTOR MODE DATA MODELS
+// =============================================================
+interface TutorChapter {
+  id: string;
+  title: string;
+  order_index: number;
+  estimated_minutes: number;
+  page_start: number;
+  summary: string;
+  planned_activities_count: number;
+  source_snippet?: string;
+}
+
+interface TutorActivity {
+  id: string;
+  type: "mcq" | "flashcard" | "fill_blank" | "true_false";
+  prompt?: string;
+  hint?: string;
+  options?: string[];
+  front?: string;
+  back?: string;
+  sentence_before?: string;
+  expected_word?: string;
+  sentence_after?: string;
+  is_true?: boolean;
+  explanation?: string;
+}
+
+interface TutorStepData {
+  step_index: number;
+  total_steps: number;
+  concept_pill: {
+    concept: string;
+    description: string;
+  };
+  learning_prose: string;
+  pills: {
+    simpler: string;
+    example: string;
+    why: string;
+  };
+  micro_steps: string[];
+  takeaway: string;
+  activity: TutorActivity;
+  source_reference?: {
+    page_number?: number;
+    quote_snippet?: string;
+  };
+}
+
+interface TutorEvaluationResult {
+  is_correct: boolean;
+  score: number;
+  correct_display: string;
+  explanation: string;
+  feedback_message: string;
+}
+
+// =============================================================
 // 5. THREE-COLUMN NOTEBOOK WORKSPACE PANEL
 // =============================================================
 interface StudySessionPanelProps {
@@ -1273,6 +1397,8 @@ interface StudySessionPanelProps {
   onAddText: () => void;
   onAddDeepResearch: () => void;
   onFilesSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  session?: any;
 }
 
 function StudySessionPanel({
@@ -1294,11 +1420,63 @@ function StudySessionPanel({
   onAddText,
   onAddDeepResearch,
   onFilesSelect,
+  session,
 }: StudySessionPanelProps) {
   
+  // High-level Mode Switch: Notebook Mode vs Tutor Mode
+  const [studyMode, setStudyMode] = useState<"notebook" | "tutor">("notebook");
+  const [authToken, setAuthToken] = useState<string>(() => session?.access_token || "");
+
+  useEffect(() => {
+    if (session?.access_token) {
+      setAuthToken(session.access_token);
+    } else {
+      supabase.auth.getSession().then(({ data: { session: s } }) => {
+        if (s?.access_token) setAuthToken(s.access_token);
+      }).catch(() => {});
+    }
+  }, [session]);
+
   const [activeTab, setActiveTab] = useState<
-    "pins" | "notes" | "briefing" | "podcast" | "flashcards" | "quiz"
-  >("pins");
+    "notes" | "briefing" | "podcast" | "flashcards" | "quiz"
+  >("notes");
+
+  // -------------------------------------------------------------
+  // TUTOR MODE WORKFLOW STATES
+  // -------------------------------------------------------------
+  const [tutorView, setTutorView] = useState<"landing" | "studying" | "completed">("landing");
+  const [tutorScope, setTutorScope] = useState<"whole" | "chapters">("whole");
+  const [tutorOutline, setTutorOutline] = useState<TutorChapter[]>([]);
+  const [isLoadingOutline, setIsLoadingOutline] = useState(false);
+  const [activeChapterIdx, setActiveChapterIdx] = useState<number>(0);
+
+  // Active step & learning block states
+  const [tutorStepIndex, setTutorStepIndex] = useState<number>(0);
+  const [tutorStepData, setTutorStepData] = useState<TutorStepData | null>(null);
+  const [isLoadingStep, setIsLoadingStep] = useState(false);
+  const [isConceptPillExpanded, setIsConceptPillExpanded] = useState(false);
+  const [activePillDetail, setActivePillDetail] = useState<"simpler" | "example" | "why" | null>(null);
+  const [followupQuestion, setFollowupQuestion] = useState("");
+  const [followupAnswer, setFollowupAnswer] = useState<string | null>(null);
+  const [isLoadingFollowup, setIsLoadingFollowup] = useState(false);
+
+  // Activity interaction states
+  const [activityResponse, setActivityResponse] = useState<any>(null);
+  const [isEvaluatingActivity, setIsEvaluatingActivity] = useState(false);
+  const [activityEvaluation, setActivityEvaluation] = useState<TutorEvaluationResult | null>(null);
+  const [isFlashcardRevealed, setIsFlashcardRevealed] = useState(false);
+
+  // Progress tracking across section & overall
+  const [sectionProgressHistory, setSectionProgressHistory] = useState<boolean[]>([]);
+  const [tutorSessionStats, setTutorSessionStats] = useState<{
+    completedActivities: number;
+    totalActivities: number;
+    accuracy: number;
+  }>({
+    completedActivities: 0,
+    totalActivities: 0,
+    accuracy: 0,
+  });
   
   // Right tabs welcome states
   const [showRightWelcome, setShowRightWelcome] = useState(false);
@@ -1329,8 +1507,19 @@ function StudySessionPanel({
   const [isFlipped, setIsFlipped] = useState(false);
   const [flashcardLog, setFlashcardLog] = useState<{ [idx: number]: "got" | "review" }>({});
 
-  // Quiz states
-  const [quizAnswers, setQuizAnswers] = useState<{ [qIdx: number]: number }>({});
+  // RAG Quiz states
+  const [quizStep, setQuizStep] = useState<"config" | "taking" | "results">("config");
+  const [quizTopic, setQuizTopic] = useState("");
+  const [quizDifficulty, setQuizDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [quizNumQuestions, setQuizNumQuestions] = useState<number>(5);
+  const [quizTargetSourceId, setQuizTargetSourceId] = useState<string>("all");
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
+  const [activeQuizSessionId, setActiveQuizSessionId] = useState<string | null>(null);
+  const [ragQuizQuestions, setRagQuizQuestions] = useState<RagQuizQuestion[]>([]);
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(0);
+  const [userSelectedAnswers, setUserSelectedAnswers] = useState<{ [questionId: string]: number }>({});
+  const [quizEvaluation, setQuizEvaluation] = useState<RagQuizEvaluation | null>(null);
   
   // Pinned Custom Card State
   const [showAddCard, setShowAddCard] = useState(false);
@@ -1443,10 +1632,6 @@ function StudySessionPanel({
     hint: "Select a source to load flashcards.",
   };
 
-  // Aggregated quizzes from active checked sources
-  const activeQuiz = sources
-    .filter((s) => selectedSourceIds.includes(s.id))
-    .flatMap((s) => s.quiz || []);
 
   // Save notebook notes auto-save
   const onSaveNotes = async (notesText: string) => {
@@ -1878,6 +2063,536 @@ function StudySessionPanel({
     }
   };
 
+  // -------------------------------------------------------------
+  // RAG QUIZ GENERATOR ACTIONS
+  // -------------------------------------------------------------
+  const handleGenerateRagQuiz = async () => {
+    const targetSourceIds =
+      quizTargetSourceId !== "all"
+        ? [quizTargetSourceId]
+        : selectedSourceIds.length > 0
+        ? selectedSourceIds
+        : sources.map((s) => s.id);
+
+    if (targetSourceIds.length === 0) {
+      toast.warning("Please check or add at least one source material.");
+      return;
+    }
+
+    setIsGeneratingQuiz(true);
+    setUserSelectedAnswers({});
+    setCurrentQuestionIdx(0);
+    setQuizEvaluation(null);
+
+    try {
+      if (useRealBackend) {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/quiz/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: quizTopic.trim() || undefined,
+            num_questions: quizNumQuestions,
+            difficulty: quizDifficulty,
+            selectedSourceIds: targetSourceIds,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${res.status}: Failed to generate quiz`);
+        }
+
+        const data = await res.json();
+        if (!data.questions || data.questions.length === 0) {
+          throw new Error("No grounded questions could be generated from the selected materials.");
+        }
+
+        setActiveQuizSessionId(data.session_id);
+        setRagQuizQuestions(data.questions);
+        setQuizStep("taking");
+        toast.success(`Generated ${data.questions.length} grounded questions!`);
+      } else {
+        // Offline / preview mock generation
+        const mockQuestions: RagQuizQuestion[] = [
+          {
+            id: "rag-q1",
+            question: `In the context of ${quizTopic || "this study domain"}, what primary mechanism governs system stability?`,
+            options: [
+              "Closed-loop feedback calibration with strict error boundaries",
+              "Uncontrolled feedforward extrapolation without damping",
+              "Asynchronous signal delays exceeding thermal thresholds",
+              "Static lookup tables devoid of real-time parameter tuning",
+            ],
+            source_reference: {
+              page_number: 1,
+              quote_snippet: "Closed-loop feedback loops ensure deterministic operational bounds.",
+            },
+          },
+          {
+            id: "rag-q2",
+            question: "Why does active recall substantially improve long-term retention compared to passive reading?",
+            options: [
+              "Retrieval practice forces neural reconsolidation and strengthens synaptic pathways",
+              "It increases the speed of optical scanning across printed lines",
+              "It reduces the need to understand fundamental theoretical principles",
+              "Passive reading causes immediate permanent memory loss",
+            ],
+            source_reference: {
+              page_number: 2,
+              quote_snippet: "Active retrieval demands cognitive reconstruction, deepening semantic memory.",
+            },
+          },
+          {
+            id: "rag-q3",
+            question: `How are edge cases handled when synthesizing exam questions at ${quizDifficulty} difficulty?`,
+            options: [
+              "By analyzing multi-hop inferences across disparate passage chunks",
+              "By ignoring edge cases and focusing exclusively on surface keywords",
+              "By generating trick questions disconnected from the primary text",
+              "By copying verbatim introductory sentences only",
+            ],
+            source_reference: {
+              page_number: 3,
+              quote_snippet: "Higher-order assessment requires synthesizing interdependent principles.",
+            },
+          },
+        ];
+
+        setActiveQuizSessionId("mock-session-" + Date.now());
+        setRagQuizQuestions(mockQuestions.slice(0, quizNumQuestions));
+        setQuizStep("taking");
+        toast.info("Offline mode: generated grounded practice quiz.");
+      }
+    } catch (err: any) {
+      console.error("Quiz generation error:", err);
+      toast.error(err.message || "Failed to generate quiz. Please check backend connection.");
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleSubmitRagQuiz = async () => {
+    if (!activeQuizSessionId) return;
+
+    const answeredCount = Object.keys(userSelectedAnswers).length;
+    if (answeredCount < ragQuizQuestions.length) {
+      const confirmSubmit = window.confirm(
+        `You have answered ${answeredCount} of ${ragQuizQuestions.length} questions. Unanswered questions will be evaluated as incorrect. Do you want to submit now?`
+      );
+      if (!confirmSubmit) return;
+    }
+
+    setIsSubmittingQuiz(true);
+    try {
+      if (useRealBackend) {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/quiz/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: activeQuizSessionId,
+            answers: userSelectedAnswers,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${res.status}: Failed to evaluate quiz`);
+        }
+
+        const data: RagQuizEvaluation = await res.json();
+        setQuizEvaluation(data);
+        setQuizStep("results");
+        toast.success(`Quiz evaluated: ${data.score}/${data.total_questions} (${data.percentage}%)`);
+      } else {
+        // Offline / preview mock evaluation
+        const mockResults: RagQuizResultItem[] = ragQuizQuestions.map((q, idx) => {
+          const userAns = userSelectedAnswers[q.id];
+          const isCorrect = userAns === 0; // index 0 is correct in mock
+          return {
+            id: q.id,
+            question: q.question,
+            options: q.options,
+            user_answer: userAns !== undefined ? userAns : null,
+            correct_answer: 0,
+            is_correct: isCorrect,
+            explanation: `Option A is directly supported by the source text on page ${q.source_reference?.page_number || 1}. It accurately details the mechanism required for optimal system operation.`,
+            source_reference: q.source_reference,
+          };
+        });
+
+        const correctCount = mockResults.filter((r) => r.is_correct).length;
+        setQuizEvaluation({
+          score: correctCount,
+          total_questions: mockResults.length,
+          percentage: Math.round((correctCount / mockResults.length) * 100),
+          results: mockResults,
+        });
+        setQuizStep("results");
+      }
+    } catch (err: any) {
+      console.error("Quiz evaluation error:", err);
+      toast.error(err.message || "Failed to evaluate quiz submission.");
+    } finally {
+      setIsSubmittingQuiz(false);
+    }
+  };
+
+  const handleResetRagQuiz = () => {
+    setQuizStep("config");
+    setActiveQuizSessionId(null);
+    setRagQuizQuestions([]);
+    setUserSelectedAnswers({});
+    setQuizEvaluation(null);
+    setCurrentQuestionIdx(0);
+  };
+
+  // -------------------------------------------------------------
+  // TUTOR MODE ACTION HANDLERS
+  // -------------------------------------------------------------
+  const handleLoadTutorOutline = async () => {
+    setIsLoadingOutline(true);
+    const targetSourceIds = selectedSourceIds.length > 0 ? selectedSourceIds : sources.map((s) => s.id);
+
+    try {
+      if (useRealBackend) {
+        // First check for an existing session to support Resume
+        try {
+          const sessRes = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/tutor/session`);
+          if (sessRes.ok) {
+            const sessData = await sessRes.json();
+            if (sessData.session && sessData.session.outline && sessData.session.outline.length > 0) {
+              setTutorOutline(sessData.session.outline);
+              setActiveChapterIdx(sessData.session.current_section_idx || 0);
+              setTutorStepIndex(sessData.session.current_step_idx || 0);
+              setTutorSessionStats({
+                completedActivities: sessData.session.completed_activities || 0,
+                totalActivities: sessData.session.total_activities || 0,
+                accuracy: sessData.session.accuracy || 0,
+              });
+              setIsLoadingOutline(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not check previous tutor session:", e);
+        }
+
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/tutor/outline`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ selectedSourceIds: targetSourceIds }),
+        });
+        if (!res.ok) throw new Error("Failed to load tutor outline");
+        const data = await res.json();
+        setTutorOutline(data.outline || []);
+      } else {
+        // Offline / preview mock outline
+        const mockOutline: TutorChapter[] = [
+          {
+            id: "sec-1",
+            title: "PROFESSIONAL SUMMARY & CORE DOMAIN",
+            order_index: 1,
+            estimated_minutes: 2,
+            page_start: 1,
+            summary: "Analyzes high-level background, domain expertise, and core competencies.",
+            planned_activities_count: 5,
+            source_snippet: "Final-year B.Tech Computer Science student specializing in AI & ML.",
+          },
+          {
+            id: "sec-2",
+            title: "TECHNICAL SKILLS & ARCHITECTURES",
+            order_index: 2,
+            estimated_minutes: 3,
+            page_start: 1,
+            summary: "Examines generative AI integration, RAG pipelines, FastAPI, React, and vector search.",
+            planned_activities_count: 5,
+            source_snippet: "AI and Generative AI: LLM integration, pgvector, Supabase, embeddings.",
+          },
+          {
+            id: "sec-3",
+            title: "ENGINEERING PROJECTS & REAL-TIME SYSTEMS",
+            order_index: 3,
+            estimated_minutes: 3,
+            page_start: 1,
+            summary: "Deep-dives into Audiora and UltraLearn architectural mechanisms.",
+            planned_activities_count: 4,
+            source_snippet: "Audiora - AI Podcast Platform, and UltraLearn - AI-Powered RAG Workspace.",
+          },
+          {
+            id: "sec-4",
+            title: "ACADEMIC FOUNDATIONS & DEPLOYMENT",
+            order_index: 4,
+            estimated_minutes: 2,
+            page_start: 1,
+            summary: "Covers database pooling, CI/CD, and production deployment best practices.",
+            planned_activities_count: 3,
+            source_snippet: "Hands-on implementation of production deployment pipelines.",
+          },
+        ];
+        setTutorOutline(mockOutline);
+      }
+    } catch (e) {
+      console.error("Tutor outline error:", e);
+      toast.error("Could not generate tutor outline.");
+    } finally {
+      setIsLoadingOutline(false);
+    }
+  };
+
+  const handleStartTutorChapter = async (chapterIdx: number) => {
+    setActiveChapterIdx(chapterIdx);
+    setTutorStepIndex(0);
+    setSectionProgressHistory([]);
+    setTutorView("studying");
+    await handleLoadTutorStep(chapterIdx, 0);
+  };
+
+  const handleLoadTutorStep = async (chapterIdx: number, stepIdx: number) => {
+    const chapter = tutorOutline[chapterIdx];
+    if (!chapter) return;
+
+    setIsLoadingStep(true);
+    setActivityResponse(null);
+    setActivityEvaluation(null);
+    setIsFlashcardRevealed(false);
+    setActivePillDetail(null);
+    setFollowupAnswer(null);
+    setFollowupQuestion("");
+
+    const targetSourceIds = selectedSourceIds.length > 0 ? selectedSourceIds : sources.map((s) => s.id);
+
+    try {
+      if (useRealBackend) {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/tutor/step`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            section_id: chapter.id,
+            section_title: chapter.title,
+            step_index: stepIdx,
+            total_steps: chapter.planned_activities_count || 5,
+            selectedSourceIds: targetSourceIds,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to load tutor step");
+        const data = await res.json();
+        setTutorStepData(data);
+      } else {
+        // Offline / preview mock step data
+        const mockActivities: TutorActivity[] = [
+          {
+            id: `act-${stepIdx}-1`,
+            type: "flashcard",
+            prompt: "What is the primary objective of a Retrieval-Augmented Generation (RAG) pipeline?",
+            hint: "Focus on how real-time database context enhances LLM responses.",
+            front: "What is the primary purpose of RAG in modern AI applications?",
+            back: "RAG connects an LLM to external verified databases (e.g. pgvector), providing real-time domain facts to prevent hallucinated claims.",
+          },
+          {
+            id: `act-${stepIdx}-2`,
+            type: "mcq",
+            prompt: "Which mechanism best ensures that asynchronous API calls do not freeze the user interface?",
+            hint: "Consider JavaScript promise-based execution.",
+            options: [
+              "Synchronous blocking while waiting for network responses",
+              "Promise-based background fetching with state-driven UI updates",
+              "Polling the server continuously every millisecond",
+              "Restarting the application on every HTTP request",
+            ],
+            explanation: "Promise-based asynchronous calls allow background data loading without blocking the main rendering thread.",
+          },
+          {
+            id: `act-${stepIdx}-3`,
+            type: "fill_blank",
+            sentence_before: "In FastAPI applications, input validation is enforced using ",
+            expected_word: "pydantic",
+            sentence_after: " models to guarantee strict schema compliance.",
+            hint: "Think of Python's most popular type-hint validation library.",
+            explanation: "Pydantic models validate request payloads before they reach business logic handlers.",
+          },
+          {
+            id: `act-${stepIdx}-4`,
+            type: "true_false",
+            prompt: "Statement: A vector database using cosine distance orders more semantically similar chunks with smaller distance values.",
+            is_true: true,
+            explanation: "Cosine distance equals 1 - cosine similarity, so smaller distance corresponds to higher semantic relevance.",
+          },
+        ];
+
+        const chosenMockAct = mockActivities[stepIdx % mockActivities.length];
+
+        setTutorStepData({
+          step_index: stepIdx,
+          total_steps: chapter.planned_activities_count || 4,
+          concept_pill: {
+            concept: "Asynchronous Data Processing & Vector RAG",
+            description: "Ensures responsive UI interactions while retrieving context from PostgreSQL.",
+          },
+          learning_prose:
+            "Modern AI learning workspaces combine client-side reactivity with grounded server pipelines. " +
+            "By offloading retrieval to vector embeddings, the tutor presents verified facts without ungrounded hallucinations.",
+          pills: {
+            simpler: "Think of it like an open-book exam: the AI references your document before answering instead of guessing from memory.",
+            example: "FastAPI handles the request, queries PostgreSQL via pgvector, and streams back the evaluated response.",
+            why: "Guarantees that every quiz question and study flashcard is 100% grounded in your actual uploaded notes.",
+          },
+          micro_steps: [
+            "1. Define request schema with strict types.",
+            "2. Retrieve relevant passage embeddings via cosine distance.",
+            "3. Synthesize the question and hold the answer key on the server.",
+            "4. Return clean, un-leaked activity prompts to the student.",
+          ],
+          takeaway: "Sequential active recall with source-grounded feedback produces 3x higher retention than passive reading.",
+          activity: chosenMockAct,
+          source_reference: {
+            page_number: chapter.page_start || 1,
+            quote_snippet: chapter.source_snippet || "Grounding context from course material.",
+          },
+        });
+      }
+    } catch (e) {
+      console.error("Tutor step error:", e);
+      toast.error("Could not load tutor step.");
+    } finally {
+      setIsLoadingStep(false);
+    }
+  };
+
+  const handleSubmitTutorActivity = async () => {
+    if (!tutorStepData?.activity || activityResponse === null || activityResponse === undefined || activityResponse === "") {
+      toast.warning("Please select or enter an answer before checking.");
+      return;
+    }
+
+    setIsEvaluatingActivity(true);
+    try {
+      if (useRealBackend) {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/tutor/evaluate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            activity: tutorStepData.activity,
+            user_answer: activityResponse,
+          }),
+        });
+        if (!res.ok) throw new Error("Evaluation request failed");
+        const evalData: TutorEvaluationResult = await res.json();
+        setActivityEvaluation(evalData);
+
+        // Update progress history
+        setSectionProgressHistory((prev) => [...prev, evalData.is_correct]);
+        setTutorSessionStats((prev) => {
+          const newCompleted = prev.completedActivities + 1;
+          const newAccuracy = Math.round(
+            ((prev.accuracy * prev.completedActivities + (evalData.is_correct ? 100 : 0)) / newCompleted)
+          );
+          return {
+            completedActivities: newCompleted,
+            totalActivities: Math.max(newCompleted, prev.totalActivities),
+            accuracy: newAccuracy,
+          };
+        });
+
+        // Persist session to backend
+        fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/tutor/session/save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outline: tutorOutline,
+            current_section_idx: activeChapterIdx,
+            current_step_idx: tutorStepIndex,
+            completed_activities: tutorSessionStats.completedActivities + 1,
+            total_activities: tutorOutline.reduce((acc, c) => acc + (c.planned_activities_count || 4), 0),
+            accuracy: evalData.is_correct ? 100 : 80,
+          }),
+        }).catch((err) => console.warn("Session save warning:", err));
+      } else {
+        // Offline / preview evaluation
+        const isMcq = tutorStepData.activity.type === "mcq";
+        const isCorrect = isMcq
+          ? Number(activityResponse) === 1
+          : String(activityResponse).trim().toLowerCase().includes("pydantic") ||
+            activityResponse === true ||
+            activityResponse === "mastered";
+
+        const evalData: TutorEvaluationResult = {
+          is_correct: isCorrect,
+          score: isCorrect ? 100 : 0,
+          correct_display: isMcq ? "B" : "Correct Concept",
+          explanation: tutorStepData.activity.explanation || "Grounded directly in your document passage.",
+          feedback_message: isCorrect
+            ? "Correct! Explain the rule that makes this answer work before moving on."
+            : "Review the grounded explanation above to solidify this concept.",
+        };
+        setActivityEvaluation(evalData);
+        setSectionProgressHistory((prev) => [...prev, evalData.is_correct]);
+      }
+    } catch (e) {
+      console.error("Evaluation error:", e);
+      toast.error("Could not evaluate answer.");
+    } finally {
+      setIsEvaluatingActivity(false);
+    }
+  };
+
+  const handleTutorContinue = async () => {
+    const currentChapter = tutorOutline[activeChapterIdx];
+    const totalStepsInChapter = currentChapter?.planned_activities_count || 4;
+
+    if (tutorStepIndex + 1 < totalStepsInChapter) {
+      // Advance to next micro-step in the same chapter
+      const nextStepIdx = tutorStepIndex + 1;
+      setTutorStepIndex(nextStepIdx);
+      await handleLoadTutorStep(activeChapterIdx, nextStepIdx);
+    } else {
+      // Completed all steps in this chapter!
+      if (activeChapterIdx + 1 < tutorOutline.length) {
+        // Advance to next chapter
+        const nextChapterIdx = activeChapterIdx + 1;
+        setActiveChapterIdx(nextChapterIdx);
+        setTutorStepIndex(0);
+        setSectionProgressHistory([]);
+        toast.success(`Completed chapter! Moving to ${tutorOutline[nextChapterIdx]?.title}`);
+        await handleLoadTutorStep(nextChapterIdx, 0);
+      } else {
+        // Entire tutor outline completed!
+        setTutorView("completed");
+        toast.success("Congratulations! You've mastered all chapters in this document.");
+      }
+    }
+  };
+
+  const handleAskTutorFollowup = async () => {
+    if (!followupQuestion.trim()) return;
+    setIsLoadingFollowup(true);
+    const targetSourceIds = selectedSourceIds.length > 0 ? selectedSourceIds : sources.map((s) => s.id);
+
+    try {
+      if (useRealBackend) {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/tutor/followup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            concept_title: tutorStepData?.concept_pill.concept || "Concept",
+            question: followupQuestion.trim(),
+            selectedSourceIds: targetSourceIds,
+          }),
+        });
+        if (!res.ok) throw new Error("Followup failed");
+        const data = await res.json();
+        setFollowupAnswer(data.answer);
+      } else {
+        setFollowupAnswer(
+          `According to the document, ${followupQuestion} aligns with the established framework to provide bounded, context-aware execution.`
+        );
+      }
+    } catch (e) {
+      toast.error("Could not answer follow-up question.");
+    } finally {
+      setIsLoadingFollowup(false);
+    }
+  };
+
   const previewSource = sources.find((s) => s.id === activeSourcePreviewId);
 
   return (
@@ -1968,8 +2683,9 @@ function StudySessionPanel({
                 {previewSource.kind === "pdf" && (
                   pdfViewMode === "original" ? (
                     (() => {
+                      const tokenParam = authToken ? `?token=${encodeURIComponent(authToken)}` : "";
                       const staticServerUrl = previewSource.fileName
-                        ? `${API_BASE_URL}/api/items/${previewSource.id}/file`
+                        ? `${API_BASE_URL}/api/items/${previewSource.id}/file${tokenParam}`
                         : null;
                       const basePdfSrc = pdfBlobUrl(previewSource.id) || previewSource.localFileUrl || staticServerUrl;
                       const pdfSrc = basePdfSrc
@@ -2649,158 +3365,756 @@ function StudySessionPanel({
         {/* COLUMN 3: RIGHT PANEL: SYNTHESIS TAB SYSTEM (lg:col-span-4) */}
         <div className="lg:col-span-4 flex flex-col bg-background overflow-hidden">
           
-          {/* Navigation Tab selection */}
-          <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-3 py-2 shrink-0 select-none">
-            <div className="flex rounded-lg bg-secondary/60 p-0.5 text-xs overflow-x-auto max-w-full border border-border/50 gap-0.5">
-              
+          {/* Navigation Tab selection & Mode Switch */}
+          <div className="flex flex-wrap items-center justify-between border-b border-border/60 bg-muted/20 px-3 py-2 shrink-0 select-none gap-2">
+            {/* Primary Mode Toggle: [Notebook] [Tutor Mode] */}
+            <div className="flex rounded-lg bg-secondary/80 p-0.5 text-xs border border-border/60 gap-0.5">
               <button
-                onClick={() => {
-                  setActiveTab("pins");
-                  setShowRightWelcome(false);
-                }}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                  activeTab === "pins" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                type="button"
+                onClick={() => setStudyMode("notebook")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  studyMode === "notebook"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Pin className="h-3 w-3" />
-                <span>Noteboard</span>
+                <BookOpen className="h-3.5 w-3.5" />
+                <span>Notebook</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => {
-                  setActiveTab("notes");
-                  setShowRightWelcome(false);
+                  setStudyMode("tutor");
+                  if (tutorOutline.length === 0) {
+                    handleLoadTutorOutline();
+                  }
                 }}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                  activeTab === "notes" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  studyMode === "tutor"
+                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Edit2 className="h-3 w-3" />
-                <span>Notes</span>
+                <GraduationCap className="h-3.5 w-3.5" />
+                <span>Tutor Mode</span>
               </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab("briefing");
-                  setShowRightWelcome(false);
-                }}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                  activeTab === "briefing" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                }`}
-              >
-                <FileStack className="h-3 w-3" />
-                <span>Briefing</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab("podcast");
-                  setShowRightWelcome(false);
-                }}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                  activeTab === "podcast" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                }`}
-              >
-                <Headphones className="h-3 w-3" />
-                <span>Audio</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab("flashcards");
-                  setShowRightWelcome(false);
-                }}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                  activeTab === "flashcards" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                }`}
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>Cards</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab("quiz");
-                  setShowRightWelcome(false);
-                }}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                  activeTab === "quiz" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                }`}
-              >
-                <BookOpen className="h-3 w-3" />
-                <span>Quiz</span>
-              </button>
-
             </div>
+
+            {/* When in Notebook Mode: show the 5 study sub-tabs */}
+            {studyMode === "notebook" ? (
+              <div className="flex rounded-lg bg-secondary/50 p-0.5 text-xs overflow-x-auto max-w-full border border-border/50 gap-0.5">
+                <button
+                  onClick={() => {
+                    setActiveTab("notes");
+                    setShowRightWelcome(false);
+                  }}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                    activeTab === "notes" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <Edit2 className="h-3 w-3" />
+                  <span>Notes</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("briefing");
+                    setShowRightWelcome(false);
+                  }}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                    activeTab === "briefing" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <FileStack className="h-3 w-3" />
+                  <span>Briefing</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("podcast");
+                    setShowRightWelcome(false);
+                  }}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                    activeTab === "podcast" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <Headphones className="h-3 w-3" />
+                  <span>Audio</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("flashcards");
+                    setShowRightWelcome(false);
+                  }}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                    activeTab === "flashcards" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Cards</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("quiz");
+                    setShowRightWelcome(false);
+                  }}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
+                    activeTab === "quiz" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <HelpCircle className="h-3 w-3" />
+                  <span>Quiz</span>
+                </button>
+              </div>
+            ) : (
+              /* When in Tutor Mode: show active state or back navigation */
+              <div className="flex items-center gap-2 text-xs">
+                {tutorView === "studying" && (
+                  <button
+                    type="button"
+                    onClick={() => setTutorView("landing")}
+                    className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border/60 bg-secondary/40"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                    <span>Chapters</span>
+                  </button>
+                )}
+                <span className="text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                  Grounded Tutor
+                </span>
+              </div>
+            )}
           </div>
 
           {/* TAB CONTENTS CONTAINER */}
           <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
             
-            {/* A. PINS TAB (NOTEBOARD INDEX GRID) */}
-            {activeTab === "pins" && (
-              <div className="h-full flex flex-col justify-start">
-                <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-3 select-none">
-                  <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
-                    Noteboard Index Cards
-                  </span>
-                  
-                  {/* Custom pin adder */}
-                  <button
-                    onClick={() => setShowAddCard(!showAddCard)}
-                    className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Card
-                  </button>
-                </div>
+            {/* ========================================================= */}
+            {/* TUTOR MODE INTERFACE (Inspired by Reference Screenshots)   */}
+            {/* ========================================================= */}
+            {studyMode === "tutor" && (
+              <div className="h-full flex flex-col justify-start text-left">
+                {isLoadingOutline ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+                    <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                    <p className="text-xs font-semibold text-foreground">Analyzing document structure...</p>
+                    <p className="text-[11px] text-muted-foreground max-w-xs">
+                      Extracting grounded sections and generating sequential study outline.
+                    </p>
+                  </div>
+                ) : tutorView === "landing" ? (
+                  /* A. TUTOR LANDING: WHOLE VS CHAPTERS SELECTION */
+                  <div className="space-y-4 pb-8">
+                    {/* Document Info Header */}
+                    <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground truncate max-w-sm">
+                          {previewSource?.title || notebook.title}
+                        </h3>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {previewSource?.kind.toUpperCase() || "DOCUMENT"} • ~{tutorOutline.reduce((a, b) => a + (b.estimated_minutes || 2), 0)} min total
+                        </p>
+                      </div>
+                    </div>
 
-                {showAddCard && (
-                  <div className="mb-4 rounded-lg border border-border/70 bg-card p-3 text-left">
-                    <textarea
-                      value={customCardContent}
-                      onChange={(e) => setCustomCardContent(e.target.value)}
-                      placeholder="Write custom facts, key points, or formula definitions..."
-                      rows={3}
-                      className="w-full bg-background border border-border/70 rounded-md p-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 resize-none"
-                    />
-                    <div className="flex justify-end gap-1.5 mt-2 text-xs">
-                      <button onClick={() => setShowAddCard(false)} className="px-2.5 py-1 border border-border/60 rounded-md hover:bg-secondary text-muted-foreground transition-colors">Cancel</button>
-                      <button onClick={addCustomCard} className="px-3 py-1 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors">Pin Card</button>
+                    {/* Scope Selector: Whole vs Chapters */}
+                    <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg border border-border/70 bg-secondary/30">
+                      <button
+                        type="button"
+                        onClick={() => setTutorScope("whole")}
+                        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          tutorScope === "whole"
+                            ? "bg-card text-foreground shadow-xs border border-border/60"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        <span>Whole Source</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTutorScope("chapters")}
+                        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          tutorScope === "chapters"
+                            ? "bg-card text-foreground shadow-xs border border-border/60"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        <span>Chapters ({tutorOutline.length})</span>
+                      </button>
+                    </div>
+
+                    {/* Resume Card (if session in progress) */}
+                    {tutorSessionStats.completedActivities > 0 && (
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-4 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider">
+                            <Clock className="h-3 w-3" />
+                            <span>In-Progress Session</span>
+                          </div>
+                          <h4 className="text-xs font-semibold text-foreground mt-1">
+                            {tutorOutline[activeChapterIdx]?.title || "Resume Chapter"}
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
+                            {tutorSessionStats.completedActivities} completed • {tutorSessionStats.accuracy || 100}% accuracy
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStartTutorChapter(activeChapterIdx)}
+                          className="flex items-center gap-1 rounded-md bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 active:scale-95 transition-all shadow-xs"
+                        >
+                          <Play className="h-3 w-3 fill-current" />
+                          <span>Resume</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Scope: Whole Source View */}
+                    {tutorScope === "whole" ? (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-border/70 bg-card p-4 space-y-2 text-left">
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                              <BookOpen className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-semibold text-foreground">Full Document Mastery</h4>
+                              <p className="text-[11px] text-muted-foreground">The AI tutor guides you through all {tutorOutline.length} chapters sequentially.</p>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+                            Every chapter introduces core grounded concepts, micro-steps, and one interactive activity at a time.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStartTutorChapter(0)}
+                          className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-3 px-4 text-xs font-semibold text-primary-foreground shadow-sm hover:opacity-90 active:scale-[0.99] transition-all"
+                        >
+                          <Play className="h-4 w-4 fill-current" />
+                          <span>Start Tutor</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* Scope: Individual Chapters View */
+                      <div className="space-y-2.5">
+                        {tutorOutline.map((chapter, cIdx) => (
+                          <div
+                            key={chapter.id || cIdx}
+                            className="rounded-lg border border-border/70 bg-card p-3.5 flex items-start justify-between gap-3 hover:border-border transition-colors text-left"
+                          >
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="grid h-5 w-5 place-items-center rounded bg-secondary text-[11px] font-mono font-bold text-foreground">
+                                  {chapter.order_index}
+                                </span>
+                                <h4 className="text-xs font-semibold text-foreground truncate">
+                                  {chapter.title}
+                                </h4>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                {chapter.summary}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground pt-0.5">
+                                <span>Page {chapter.page_start}</span>
+                                <span>•</span>
+                                <span>~{chapter.estimated_minutes} min</span>
+                                <span>•</span>
+                                <span>{chapter.planned_activities_count} activities</span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleStartTutorChapter(cIdx)}
+                              className="flex items-center gap-1 rounded-md border border-border/70 bg-secondary/60 hover:bg-secondary px-3 py-1.5 text-xs font-medium text-foreground shrink-0 transition-colors"
+                            >
+                              <span>Start</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : tutorView === "studying" ? (
+                  /* B. ACTIVE TUTOR SESSION (Concept, Micro-steps, Activity) */
+                  <div className="space-y-4 pb-12">
+                    {/* Section Header Card */}
+                    <div className="rounded-lg border border-border/70 bg-card p-3.5 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-semibold text-primary uppercase tracking-wider bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                            Focus Chapter
+                          </span>
+                          <span className="text-[11px] text-muted-foreground font-mono">
+                            ~{tutorOutline[activeChapterIdx]?.estimated_minutes || 2} min
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-semibold text-foreground mt-1 truncate">
+                          {tutorOutline[activeChapterIdx]?.title}
+                        </h4>
+                      </div>
+
+                      {/* Top Right Mini Step Progress */}
+                      <div className="text-right shrink-0">
+                        <span className="text-[11px] font-mono font-medium text-muted-foreground">
+                          {tutorStepIndex + 1}/{tutorOutline[activeChapterIdx]?.planned_activities_count || 4}
+                        </span>
+                        <div className="flex items-center gap-1 mt-1">
+                          {Array.from({ length: tutorOutline[activeChapterIdx]?.planned_activities_count || 4 }).map((_, idx) => (
+                            <span
+                              key={idx}
+                              className={`h-1.5 w-3 rounded-full transition-colors ${
+                                idx < tutorStepIndex
+                                  ? "bg-emerald-500"
+                                  : idx === tutorStepIndex
+                                  ? "bg-primary animate-pulse"
+                                  : "bg-secondary"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isLoadingStep ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
+                        <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                        <p className="text-xs font-medium text-foreground">Synthesizing grounded lesson step...</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">Retrieving verified vector chunks</p>
+                      </div>
+                    ) : tutorStepData ? (
+                      <div className="space-y-4">
+                        {/* Concept Pill */}
+                        <div className="rounded-md border border-border/60 bg-secondary/30 p-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span className="text-xs font-semibold text-foreground truncate">
+                                {tutorStepData.concept_pill.concept}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsConceptPillExpanded(!isConceptPillExpanded)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground font-mono transition-colors shrink-0"
+                            >
+                              {isConceptPillExpanded ? "collapse" : "expand"}
+                            </button>
+                          </div>
+                          {isConceptPillExpanded && (
+                            <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed pt-1 border-t border-border/40">
+                              {tutorStepData.concept_pill.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Grounded Learning Prose */}
+                        <p className="text-xs text-foreground/90 leading-relaxed font-sans">
+                          {tutorStepData.learning_prose}
+                        </p>
+
+                        {/* Interactive Deep-Dive Exploration Pills */}
+                        <div className="flex items-center gap-1.5 select-none">
+                          {(["simpler", "example", "why"] as const).map((pill) => {
+                            const isActive = activePillDetail === pill;
+                            const label = pill === "simpler" ? "Simpler" : pill === "example" ? "Example" : "Why?";
+                            return (
+                              <button
+                                key={pill}
+                                type="button"
+                                onClick={() => setActivePillDetail(isActive ? null : pill)}
+                                className={`rounded-full px-3 py-1 text-xs font-medium border transition-all ${
+                                  isActive
+                                    ? "bg-amber-500/15 border-amber-500/40 text-amber-400 font-semibold"
+                                    : "bg-secondary/40 border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Deep-Dive Expandable Detail Card with Follow-up */}
+                        {activePillDetail && (
+                          <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.03] p-3.5 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono font-semibold uppercase text-amber-400">
+                                {activePillDetail.toUpperCase()} BREAKDOWN
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setActivePillDetail(null)}
+                                className="text-[10px] text-muted-foreground hover:text-foreground"
+                              >
+                                Close
+                              </button>
+                            </div>
+                            <p className="text-xs text-foreground/90 leading-relaxed">
+                              {tutorStepData.pills[activePillDetail]}
+                            </p>
+
+                            {/* Mini Follow-up Q&A Form */}
+                            <div className="pt-2 border-t border-border/50">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={followupQuestion}
+                                  onChange={(e) => setFollowupQuestion(e.target.value)}
+                                  placeholder="Ask a quick follow-up question..."
+                                  onKeyDown={(e) => e.key === "Enter" && handleAskTutorFollowup()}
+                                  className="flex-1 bg-background border border-border/60 rounded px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isLoadingFollowup || !followupQuestion.trim()}
+                                  onClick={handleAskTutorFollowup}
+                                  className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-400 disabled:opacity-40 transition-colors shrink-0"
+                                >
+                                  {isLoadingFollowup ? <Loader2 className="h-3 w-3 animate-spin" /> : "Ask"}
+                                </button>
+                              </div>
+
+                              {followupAnswer && (
+                                <p className="text-xs text-foreground/90 bg-background/80 p-2.5 rounded border border-border/50 mt-2 leading-relaxed">
+                                  {followupAnswer}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Micro-Steps */}
+                        {tutorStepData.micro_steps && tutorStepData.micro_steps.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-semibold">
+                              Micro-steps
+                            </span>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              {tutorStepData.micro_steps.map((stepText, sIdx) => (
+                                <p key={sIdx} className="leading-relaxed text-foreground/80">
+                                  {stepText}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Takeaway Box */}
+                        {tutorStepData.takeaway && (
+                          <div className="rounded-md border border-border/60 bg-secondary/40 p-3 text-xs text-foreground/90 leading-relaxed">
+                            <span className="font-semibold text-primary mr-1">Takeaway:</span>
+                            {tutorStepData.takeaway}
+                          </div>
+                        )}
+
+                        {/* Emerald Segmented Progress Bar */}
+                        <div className="space-y-1 pt-2">
+                          <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+                            <span>Activity {tutorStepIndex + 1} of {tutorStepData.total_steps}</span>
+                            <span>{Math.round(((tutorStepIndex + (activityEvaluation ? 1 : 0)) / tutorStepData.total_steps) * 100)}%</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 w-full">
+                            {Array.from({ length: tutorStepData.total_steps }).map((_, segIdx) => (
+                              <div
+                                key={segIdx}
+                                className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                                  segIdx < tutorStepIndex || (segIdx === tutorStepIndex && activityEvaluation?.is_correct)
+                                    ? "bg-emerald-500"
+                                    : segIdx === tutorStepIndex
+                                    ? "bg-primary"
+                                    : "bg-secondary/80"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* ============================================== */}
+                        {/* THE SINGLE ACTIVE ACTIVITY CARD                */}
+                        {/* ============================================== */}
+                        {tutorStepData.activity && (
+                          <div className="rounded-lg border border-border/70 bg-card p-4 space-y-3.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                                {tutorStepData.activity.type.toUpperCase()}
+                              </span>
+                              {tutorStepData.activity.hint && !activityEvaluation && (
+                                <span className="text-[10px] font-mono text-muted-foreground">
+                                  Hint available
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 1. Multiple-Choice Activity */}
+                            {tutorStepData.activity.type === "mcq" && (
+                              <div className="space-y-3">
+                                <p className="text-xs font-semibold leading-relaxed text-foreground">
+                                  {tutorStepData.activity.prompt}
+                                </p>
+
+                                <div className="space-y-2">
+                                  {tutorStepData.activity.options?.map((opt, optIdx) => {
+                                    const isSelected = activityResponse === optIdx;
+                                    const letter = String.fromCharCode(65 + optIdx);
+                                    let btnStyle = "border-border/70 bg-secondary/20 hover:bg-secondary/40 text-foreground";
+                                    if (activityEvaluation) {
+                                      if (optIdx === (tutorStepData.activity.correct_option ?? 1)) {
+                                        btnStyle = "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-semibold";
+                                      } else if (isSelected && !activityEvaluation.is_correct) {
+                                        btnStyle = "border-destructive/50 bg-destructive/10 text-destructive";
+                                      }
+                                    } else if (isSelected) {
+                                      btnStyle = "border-primary bg-primary/10 text-foreground ring-1 ring-primary";
+                                    }
+
+                                    return (
+                                      <button
+                                        key={optIdx}
+                                        type="button"
+                                        disabled={activityEvaluation !== null}
+                                        onClick={() => setActivityResponse(optIdx)}
+                                        className={`w-full flex items-start gap-3 rounded-lg border p-3 text-left transition-all ${btnStyle}`}
+                                      >
+                                        <span
+                                          className={`grid h-5 w-5 shrink-0 place-items-center rounded text-[11px] font-mono font-bold ${
+                                            isSelected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                                          }`}
+                                        >
+                                          {letter}
+                                        </span>
+                                        <span className="text-xs leading-relaxed pt-0.5">{opt}</span>
+                                        {activityEvaluation && optIdx === (tutorStepData.activity.correct_option ?? 1) && (
+                                          <Check className="h-4 w-4 text-emerald-400 ml-auto shrink-0" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 2. Flashcard Activity */}
+                            {tutorStepData.activity.type === "flashcard" && (
+                              <div className="space-y-3 text-center">
+                                <div className="rounded-lg border border-border/70 bg-secondary/30 p-5 space-y-2">
+                                  <p className="text-xs font-semibold text-foreground leading-relaxed">
+                                    {tutorStepData.activity.front || tutorStepData.activity.prompt}
+                                  </p>
+                                  {tutorStepData.activity.hint && !isFlashcardRevealed && (
+                                    <p className="text-[11px] text-muted-foreground italic">
+                                      Hint: {tutorStepData.activity.hint}
+                                    </p>
+                                  )}
+
+                                  {isFlashcardRevealed ? (
+                                    <div className="pt-3 border-t border-border/50 text-xs text-foreground/90 font-medium">
+                                      {tutorStepData.activity.back}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsFlashcardRevealed(true);
+                                        setActivityResponse("mastered");
+                                      }}
+                                      className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-4 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+                                    >
+                                      <Eye className="h-3.5 w-3.5 text-primary" />
+                                      <span>Tap to reveal</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 3. Fill in the Blank Activity */}
+                            {tutorStepData.activity.type === "fill_blank" && (
+                              <div className="space-y-3">
+                                <p className="text-xs leading-relaxed text-foreground font-medium">
+                                  {tutorStepData.activity.sentence_before}
+                                  <input
+                                    type="text"
+                                    disabled={activityEvaluation !== null}
+                                    value={activityResponse || ""}
+                                    onChange={(e) => setActivityResponse(e.target.value)}
+                                    placeholder="your answer"
+                                    className="mx-1.5 inline-block w-36 rounded border border-border/70 bg-background px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                  {tutorStepData.activity.sentence_after}
+                                </p>
+                                {tutorStepData.activity.hint && (
+                                  <p className="text-[10px] text-muted-foreground italic">
+                                    💡 Need a hint? {tutorStepData.activity.hint}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* 4. True / False Activity */}
+                            {tutorStepData.activity.type === "true_false" && (
+                              <div className="space-y-3">
+                                <p className="text-xs font-semibold leading-relaxed text-foreground">
+                                  {tutorStepData.activity.prompt}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[
+                                    { val: true, label: "True" },
+                                    { val: false, label: "False" },
+                                  ].map((choice) => (
+                                    <button
+                                      key={String(choice.val)}
+                                      type="button"
+                                      disabled={activityEvaluation !== null}
+                                      onClick={() => setActivityResponse(choice.val)}
+                                      className={`py-2.5 rounded-lg border text-xs font-semibold transition-all ${
+                                        activityResponse === choice.val
+                                          ? "border-primary bg-primary/10 text-primary"
+                                          : "border-border/70 bg-secondary/30 text-muted-foreground hover:text-foreground"
+                                      }`}
+                                    >
+                                      {choice.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Submit / Check Answer Button */}
+                            {!activityEvaluation && (
+                              <button
+                                type="button"
+                                disabled={isEvaluatingActivity || activityResponse === null || activityResponse === ""}
+                                onClick={handleSubmitTutorActivity}
+                                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 px-4 text-xs font-semibold text-primary-foreground hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-40"
+                              >
+                                {isEvaluatingActivity ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Evaluating...</span>
+                                  </>
+                                ) : (
+                                  <span>Check Answer</span>
+                                )}
+                              </button>
+                            )}
+
+                            {/* Real-Time Evaluation Result Card & Continue */}
+                            {activityEvaluation && (
+                              <div className="space-y-3 pt-2 border-t border-border/50">
+                                <div className="flex items-center justify-between">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      {activityEvaluation.is_correct ? (
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                      ) : (
+                                        <AlertCircle className="h-4 w-4 text-destructive" />
+                                      )}
+                                      <span
+                                        className={`text-xs font-semibold ${
+                                          activityEvaluation.is_correct ? "text-emerald-400" : "text-destructive"
+                                        }`}
+                                      >
+                                        {activityEvaluation.is_correct ? "Correct" : "Needs Review"}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {activityEvaluation.feedback_message}
+                                    </p>
+                                  </div>
+
+                                  <div className="text-right">
+                                    <span className="text-xs font-mono font-bold text-foreground">
+                                      {activityEvaluation.score}%
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Grounded Explanation */}
+                                <div className="rounded-md border border-border/60 bg-secondary/40 p-3 text-xs text-foreground/90 leading-relaxed">
+                                  <span className="font-semibold text-foreground block mb-0.5">Explanation:</span>
+                                  {activityEvaluation.explanation}
+                                </div>
+
+                                {/* Continue Action */}
+                                <button
+                                  type="button"
+                                  onClick={handleTutorContinue}
+                                  className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 px-4 text-xs font-semibold text-primary-foreground hover:opacity-90 active:scale-[0.99] transition-all shadow-xs"
+                                >
+                                  <span>Continue</span>
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  /* C. SESSION COMPLETED RECAP */
+                  <div className="space-y-4 py-8 text-center">
+                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                      <GraduationCap className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-foreground">Document Tutor Completed!</h3>
+                      <p className="text-xs text-muted-foreground">
+                        You have mastered all {tutorOutline.length} chapters grounded in your primary document.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/70 bg-card p-4 max-w-sm mx-auto grid grid-cols-2 gap-2 text-center">
+                      <div>
+                        <span className="text-[10px] font-mono uppercase text-muted-foreground">Chapters</span>
+                        <div className="text-lg font-bold text-foreground mt-0.5">{tutorOutline.length}</div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono uppercase text-muted-foreground">Accuracy</span>
+                        <div className="text-lg font-bold text-emerald-400 mt-0.5">{tutorSessionStats.accuracy || 100}%</div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTutorView("landing");
+                          handleLoadTutorOutline();
+                        }}
+                        className="rounded-md border border-border/70 px-4 py-2 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+                      >
+                        Review Chapters
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStudyMode("notebook")}
+                        className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-colors"
+                      >
+                        Return to Notebook
+                      </button>
                     </div>
                   </div>
                 )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pb-6 text-left">
-                  {(!notebook.pinnedNotes || notebook.pinnedNotes.length === 0) && (
-                    <div className="col-span-full flex flex-col items-center justify-center py-12 opacity-40 text-center px-4">
-                      <Pin className="h-7 w-7 mb-2 text-muted-foreground" />
-                      <p className="text-xs text-foreground font-medium">Your noteboard is empty</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal max-w-xs">
-                        Pin important responses by clicking the pin icon on chat messages, or click '+ Add Card'.
-                      </p>
-                    </div>
-                  )}
-
-                  {notebook.pinnedNotes?.map((pin) => (
-                    <div
-                      key={pin.id}
-                      className="group bg-card border border-border/60 rounded-lg p-3 hover:border-border transition-colors flex flex-col justify-between h-36 relative"
-                    >
-                      <button
-                        onClick={() => deletePin(pin.id)}
-                        className="absolute top-2 right-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 rounded hover:bg-secondary"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                      <div className="text-xs text-foreground/85 pr-5 leading-relaxed overflow-y-auto scrollbar-none font-sans whitespace-pre-wrap flex-1 select-text">
-                        {pin.content}
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
+            {/* ========================================================= */}
+            {/* NOTEBOOK MODE INTERFACE (Preserving All Existing Features) */}
+            {/* ========================================================= */}
+            {studyMode === "notebook" && (
+              <>
             {/* B. NOTES TAB (AUTOSAVING MARKDOWN EDITOR) */}
             {activeTab === "notes" && (
               <div className="h-full flex flex-col justify-start gap-3 text-left">
@@ -3190,87 +4504,523 @@ function StudySessionPanel({
               </div>
             )}
 
-            {/* F. QUIZ TAB (Practice Quiz) */}
+            {/* F. RAG QUIZ GENERATOR TAB */}
             {activeTab === "quiz" && (
               <div className="h-full flex flex-col justify-start text-left">
+                {/* Header */}
                 <div className="flex justify-between items-center border-b border-border/60 pb-2 mb-4 select-none">
-                  <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
-                    Socratic Quizzes
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
+                      {quizStep === "config" && "RAG Quiz Generator"}
+                      {quizStep === "taking" && `Quiz in Progress • ${currentQuestionIdx + 1}/${ragQuizQuestions.length}`}
+                      {quizStep === "results" && "Evaluation Results"}
+                    </span>
+                  </div>
                   <span className="text-[11px] font-mono font-medium text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
-                    {activeQuiz.length} Questions
+                    {quizStep === "config" && "Grounded in Chunks"}
+                    {quizStep === "taking" && `${quizDifficulty.toUpperCase()}`}
+                    {quizStep === "results" && `${quizEvaluation?.score}/${quizEvaluation?.total_questions} (${quizEvaluation?.percentage}%)`}
                   </span>
                 </div>
 
-                {activeQuiz.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 opacity-40 text-center px-4">
-                    <BookOpen className="h-8 w-8 mb-2 text-muted-foreground" />
-                    <p className="text-xs font-medium text-foreground">No quizzes available</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Check active sources on the left checklist to load practice quizzes.</p>
-                  </div>
-                ) : (
+                {/* 1. CONFIGURATION VIEW */}
+                {quizStep === "config" && (
                   <div className="space-y-4 pb-8">
-                    {activeQuiz.map((q, qIdx) => {
-                      const isAnswered = quizAnswers[qIdx] !== undefined;
-                      const selectedAnswer = quizAnswers[qIdx];
-                      return (
-                        <div key={qIdx} className="rounded-lg border border-border/60 bg-card p-3.5 text-left">
-                          <span className="text-[10px] font-mono font-semibold text-primary uppercase tracking-wider">
-                            Question {qIdx + 1}
-                          </span>
-                          <p className="mt-1 text-xs font-medium leading-relaxed text-foreground">
-                            {q.question}
-                          </p>
+                    <div className="rounded-lg border border-border/70 bg-secondary/30 p-3.5 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                        <h4 className="text-xs font-semibold text-foreground">Grounded Quiz Synthesis</h4>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Synthesizes exam-calibrated multiple choice questions from verified vector chunks of your study materials. Answers are securely verified on the server.
+                      </p>
+                    </div>
 
-                          <div className="mt-3 space-y-1.5">
-                            {q.options.map((opt, optIdx) => {
-                              let btnClass = "border-border/60 bg-background hover:bg-secondary/70 text-foreground/90";
-                              if (isAnswered) {
-                                if (optIdx === q.answer) {
-                                  btnClass = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 font-medium";
-                                } else if (selectedAnswer === optIdx) {
-                                  btnClass = "bg-destructive/10 border-destructive/30 text-destructive font-medium";
-                                } else {
-                                  btnClass = "border-border/40 bg-background/50 text-muted-foreground/40 cursor-default";
-                                }
-                              }
-                              return (
-                                <button
-                                  key={optIdx}
-                                  disabled={isAnswered}
-                                  onClick={() => {
-                                    setQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
-                                    if (optIdx === q.answer) {
-                                      toast.success(`Correct! Question ${qIdx + 1}`);
-                                    } else {
-                                      toast.error(`Incorrect! Question ${qIdx + 1}`);
-                                    }
-                                  }}
-                                  className={`w-full rounded-md border px-3 py-2 text-left text-xs transition-colors ${btnClass}`}
+                    {/* Source Selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-foreground flex items-center justify-between">
+                        <span>Document Source Scope</span>
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {selectedSourceIds.length > 0 ? `${selectedSourceIds.length} active` : "All"}
+                        </span>
+                      </label>
+                      <select
+                        value={quizTargetSourceId}
+                        onChange={(e) => setQuizTargetSourceId(e.target.value)}
+                        className="w-full rounded-md border border-border/70 bg-card px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="all">
+                          All Checked Sources ({selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} materials)
+                        </option>
+                        {sources.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.title} ({s.kind.toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Topic Focus */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-foreground flex items-center justify-between">
+                        <span>Topic / Focus Area (Optional)</span>
+                        <span className="text-[10px] font-mono text-muted-foreground">Vector retrieval</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={quizTopic}
+                        onChange={(e) => setQuizTopic(e.target.value)}
+                        placeholder="e.g. Memory Hierarchy, PID Tuning, Socratic Method..."
+                        className="w-full rounded-md border border-border/70 bg-card px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    {/* Difficulty Calibration */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-foreground">Difficulty Level</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: "easy", label: "Easy", desc: "Core recall & definitions" },
+                          { id: "medium", label: "Medium", desc: "Application & mechanisms" },
+                          { id: "hard", label: "Hard", desc: "Synthesis & edge cases" },
+                        ].map((diff) => (
+                          <button
+                            key={diff.id}
+                            type="button"
+                            onClick={() => setQuizDifficulty(diff.id as any)}
+                            className={`flex flex-col p-2.5 rounded-lg border text-left transition-all ${
+                              quizDifficulty === diff.id
+                                ? "border-primary bg-primary/10 shadow-xs"
+                                : "border-border/70 bg-card hover:bg-secondary/40 text-muted-foreground"
+                            }`}
+                          >
+                            <span className={`text-xs font-semibold ${quizDifficulty === diff.id ? "text-primary" : "text-foreground"}`}>
+                              {diff.label}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{diff.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Question Count */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-foreground">Question Count</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { count: 3, label: "3 Questions", tag: "Quick" },
+                          { count: 5, label: "5 Questions", tag: "Standard" },
+                          { count: 10, label: "10 Questions", tag: "Drill" },
+                        ].map((item) => (
+                          <button
+                            key={item.count}
+                            type="button"
+                            onClick={() => setQuizNumQuestions(item.count)}
+                            className={`flex flex-col p-2.5 rounded-lg border text-left transition-all ${
+                              quizNumQuestions === item.count
+                                ? "border-primary bg-primary/10 shadow-xs"
+                                : "border-border/70 bg-card hover:bg-secondary/40 text-muted-foreground"
+                            }`}
+                          >
+                            <span className={`text-xs font-semibold ${quizNumQuestions === item.count ? "text-primary" : "text-foreground"}`}>
+                              {item.label}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground mt-0.5">{item.tag}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      type="button"
+                      disabled={isGeneratingQuiz || sources.length === 0}
+                      onClick={handleGenerateRagQuiz}
+                      className="w-full mt-2 flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 px-4 text-xs font-semibold text-primary-foreground shadow-sm hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-50"
+                    >
+                      {isGeneratingQuiz ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Synthesizing grounded quiz...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4" />
+                          <span>Generate Grounded RAG Quiz</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. TAKING QUIZ VIEW */}
+                {quizStep === "taking" && (
+                  <div className="space-y-4 pb-8">
+                    {/* Stepper Progress */}
+                    <div className="flex items-center justify-between text-xs border-b border-border/50 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-foreground text-xs">
+                          Question {currentQuestionIdx + 1} of {ragQuizQuestions.length}
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded uppercase font-medium bg-primary/10 border border-primary/20 text-primary">
+                          {quizDifficulty}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          {Object.keys(userSelectedAnswers).length}/{ragQuizQuestions.length} answered
+                        </span>
+                        <button
+                          onClick={handleResetRagQuiz}
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline transition-colors"
+                        >
+                          Exit
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Visual Progress Bar */}
+                    <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-primary h-full transition-all duration-300"
+                        style={{
+                          width: `${((currentQuestionIdx + 1) / ragQuizQuestions.length) * 100}%`,
+                        }}
+                      />
+                    </div>
+
+                    {/* Active Question Prompt */}
+                    {ragQuizQuestions[currentQuestionIdx] && (
+                      <div className="rounded-lg border border-border/70 bg-card p-4 space-y-3.5">
+                        {ragQuizQuestions[currentQuestionIdx].source_reference?.page_number && (
+                          <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded border border-border/50">
+                            <BookOpen className="h-3 w-3 text-primary" />
+                            <span>Grounded from Page {ragQuizQuestions[currentQuestionIdx].source_reference?.page_number}</span>
+                          </div>
+                        )}
+
+                        <p className="text-sm font-semibold leading-relaxed text-foreground">
+                          {ragQuizQuestions[currentQuestionIdx].question}
+                        </p>
+
+                        {/* Options */}
+                        <div className="space-y-2 pt-1">
+                          {ragQuizQuestions[currentQuestionIdx].options.map((opt, optIdx) => {
+                            const qId = ragQuizQuestions[currentQuestionIdx].id;
+                            const isSelected = userSelectedAnswers[qId] === optIdx;
+                            const letter = String.fromCharCode(65 + optIdx);
+                            return (
+                              <button
+                                key={optIdx}
+                                type="button"
+                                onClick={() => {
+                                  setUserSelectedAnswers((prev) => ({
+                                    ...prev,
+                                    [qId]: optIdx,
+                                  }));
+                                }}
+                                className={`w-full flex items-start gap-3 rounded-lg border p-3 text-left transition-all ${
+                                  isSelected
+                                    ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                                    : "border-border/70 bg-secondary/20 hover:bg-secondary/50 text-foreground/90"
+                                }`}
+                              >
+                                <span
+                                  className={`grid h-5 w-5 shrink-0 place-items-center rounded text-[11px] font-mono font-bold transition-colors ${
+                                    isSelected
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-secondary text-muted-foreground"
+                                  }`}
                                 >
-                                  {opt}
-                                </button>
-                              );
-                            })}
+                                  {letter}
+                                </span>
+                                <span className="text-xs font-normal leading-relaxed pt-0.5">{opt}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stepper Navigation */}
+                    <div className="flex items-center justify-between pt-2">
+                      <button
+                        type="button"
+                        disabled={currentQuestionIdx === 0}
+                        onClick={() => setCurrentQuestionIdx((p) => Math.max(0, p - 1))}
+                        className="flex items-center gap-1 rounded-md border border-border/70 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                        <span>Previous</span>
+                      </button>
+
+                      {/* Quick-jump Dots */}
+                      <div className="flex items-center gap-1.5">
+                        {ragQuizQuestions.map((q, qIdx) => {
+                          const isCurrent = qIdx === currentQuestionIdx;
+                          const isAnswered = userSelectedAnswers[q.id] !== undefined;
+                          return (
+                            <button
+                              key={q.id}
+                              onClick={() => setCurrentQuestionIdx(qIdx)}
+                              className={`h-2.5 rounded-full transition-all ${
+                                isCurrent
+                                  ? "w-6 bg-primary"
+                                  : isAnswered
+                                  ? "w-2.5 bg-primary/60"
+                                  : "w-2.5 bg-border hover:bg-muted-foreground"
+                              }`}
+                              title={`Question ${qIdx + 1}`}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      {currentQuestionIdx < ragQuizQuestions.length - 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => setCurrentQuestionIdx((p) => Math.min(ragQuizQuestions.length - 1, p + 1))}
+                          className="flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/80 transition-colors"
+                        >
+                          <span>Next</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isSubmittingQuiz}
+                          onClick={handleSubmitRagQuiz}
+                          className="flex items-center gap-1 rounded-md bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+                        >
+                          {isSubmittingQuiz ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>Evaluating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Submit Quiz</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Always accessible Submit helper */}
+                    {currentQuestionIdx < ragQuizQuestions.length - 1 && (
+                      <div className="pt-2 text-center border-t border-border/40">
+                        <button
+                          type="button"
+                          disabled={isSubmittingQuiz}
+                          onClick={handleSubmitRagQuiz}
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline transition-colors"
+                        >
+                          Finished early? Submit all answered questions for evaluation
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. EVALUATION RESULTS VIEW */}
+                {quizStep === "results" && (
+                  <div className="space-y-4 pb-8">
+                    {quizEvaluation && (
+                      <div className="rounded-lg border border-border/70 bg-secondary/30 p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Mastery Score</span>
+                            <div className="text-2xl font-bold font-display text-foreground mt-0.5">
+                              {quizEvaluation.score} / {quizEvaluation.total_questions}{" "}
+                              <span className="text-sm font-normal text-muted-foreground">
+                                ({quizEvaluation.percentage}%)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                                quizEvaluation.percentage >= 80
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                  : quizEvaluation.percentage >= 50
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                  : "bg-destructive/10 text-destructive border-destructive/30"
+                              }`}
+                            >
+                              {quizEvaluation.percentage >= 80
+                                ? "🌟 High Mastery"
+                                : quizEvaluation.percentage >= 50
+                                ? "⚡ Solid Recall"
+                                : "📖 Needs Review"}
+                            </span>
                           </div>
                         </div>
-                      );
-                    })}
 
-                    <div className="text-center pt-2 border-t border-border/50">
-                      <button
-                        onClick={() => {
-                          setQuizAnswers({});
-                          toast.info("Quiz reset");
-                        }}
-                        className="rounded-md border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-                      >
-                        Reset quiz answers
-                      </button>
+                        <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
+                          <p className="text-[11px] text-muted-foreground">
+                            {quizEvaluation.percentage >= 80
+                              ? "Excellent retention grounded in primary course materials."
+                              : "Review grounded explanations and document citations below."}
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={handleResetRagQuiz}
+                            className="flex items-center gap-1.5 rounded-md border border-border/70 bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            <span>New Quiz</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Question Review Cards */}
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                          Grounded Explanations & Citations
+                        </span>
+                        <span className="text-[11px] font-mono text-muted-foreground">
+                          {quizEvaluation?.results.filter((r) => r.is_correct).length} correct •{" "}
+                          {quizEvaluation?.results.filter((r) => !r.is_correct).length} incorrect
+                        </span>
+                      </div>
+
+                      {quizEvaluation?.results.map((res, rIdx) => {
+                        const isCorrect = res.is_correct;
+                        return (
+                          <div
+                            key={res.id || rIdx}
+                            className={`rounded-lg border p-4 space-y-3 text-left transition-colors ${
+                              isCorrect
+                                ? "border-emerald-500/30 bg-emerald-500/[0.03]"
+                                : "border-destructive/30 bg-destructive/[0.03]"
+                            }`}
+                          >
+                            {/* Card Header */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground">
+                                Question {rIdx + 1}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border ${
+                                  isCorrect
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                    : "bg-destructive/10 text-destructive border-destructive/20"
+                                }`}
+                              >
+                                {isCorrect ? (
+                                  <>
+                                    <Check className="h-3 w-3" />
+                                    <span>Correct</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <X className="h-3 w-3" />
+                                    <span>Incorrect</span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+
+                            {/* Question */}
+                            <p className="text-xs font-semibold leading-relaxed text-foreground">
+                              {res.question}
+                            </p>
+
+                            {/* Options with Status */}
+                            <div className="space-y-1.5 pt-1">
+                              {res.options.map((opt, optIdx) => {
+                                const isSelected = res.user_answer === optIdx;
+                                const isActualCorrect = res.correct_answer === optIdx;
+                                const letter = String.fromCharCode(65 + optIdx);
+
+                                let optionStyle = "border-border/50 bg-card/60 text-muted-foreground/70";
+                                if (isActualCorrect) {
+                                  optionStyle = "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-medium";
+                                } else if (isSelected && !isCorrect) {
+                                  optionStyle = "border-destructive/50 bg-destructive/10 text-destructive font-medium";
+                                }
+
+                                return (
+                                  <div
+                                    key={optIdx}
+                                    className={`flex items-start gap-2.5 rounded-md border p-2 text-xs ${optionStyle}`}
+                                  >
+                                    <span className="font-mono font-bold text-[10px] pt-0.5">{letter}.</span>
+                                    <span className="flex-1 leading-relaxed">{opt}</span>
+                                    {isActualCorrect && (
+                                      <span className="text-[10px] font-mono text-emerald-400 shrink-0 font-medium">
+                                        ✓ Correct
+                                      </span>
+                                    )}
+                                    {isSelected && !isActualCorrect && (
+                                      <span className="text-[10px] font-mono text-destructive shrink-0 font-medium">
+                                        ✗ Your Choice
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Grounded Explanation */}
+                            <div className="rounded-md border border-border/60 bg-secondary/40 p-3 space-y-1 text-left">
+                              <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-foreground/80 font-medium">
+                                <Sparkles className="h-3 w-3 text-primary" />
+                                <span>Grounded Explanation</span>
+                              </div>
+                              <p className="text-xs text-foreground/90 leading-relaxed font-normal">
+                                {res.explanation}
+                              </p>
+                            </div>
+
+                            {/* Primary Source Citation */}
+                            {res.source_reference && (
+                              <div className="flex items-center justify-between text-[11px] bg-card/80 border border-border/60 rounded px-2.5 py-1.5">
+                                <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                                  <BookOpen className="h-3 w-3 text-primary shrink-0" />
+                                  <span className="font-mono text-[10px] shrink-0">
+                                    {res.source_reference.page_number
+                                      ? `Page ${res.source_reference.page_number}`
+                                      : "Source Chunk"}
+                                  </span>
+                                  {res.source_reference.quote_snippet && (
+                                    <span className="italic text-[10px] text-muted-foreground/80 truncate">
+                                      "{res.source_reference.quote_snippet}"
+                                    </span>
+                                  )}
+                                </div>
+
+                                {res.source_reference.page_number && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (res.source_reference?.page_number) {
+                                        setPdfPageNum(res.source_reference.page_number);
+                                        toast.info(`Navigated document preview to page ${res.source_reference.page_number}`);
+                                      }
+                                    }}
+                                    className="text-[10px] font-mono text-primary hover:underline flex items-center gap-1 shrink-0 ml-2"
+                                  >
+                                    <span>Jump to Page {res.source_reference.page_number}</span>
+                                    <ExternalLink className="h-2.5 w-2.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </div>
+            )}
+            </>
             )}
 
           </div>

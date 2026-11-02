@@ -88,11 +88,18 @@ const authenticateUser = async (req, res, next) => {
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid authorization token" });
+  const tokenQuery = req.query.token;
+  let token = null;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (tokenQuery && typeof tokenQuery === "string") {
+    token = tokenQuery;
   }
 
-  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ error: "Missing or invalid authorization token" });
+  }
 
   // 1. Check in-memory auth cache for sub-millisecond resolution
   const cached = userAuthCache.get(token);
@@ -659,10 +666,37 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
     }
 
     // 5. Insert Quizzes
-    for (const q of quiz) {
+    for (const q of (quiz || [])) {
+      let optionsArray = [];
+      if (Array.isArray(q.options)) {
+        optionsArray = q.options.map(String);
+      } else if (typeof q.options === "object" && q.options !== null) {
+        optionsArray = Object.values(q.options).map(String);
+      } else if (typeof q.options === "string") {
+        try {
+          const parsed = JSON.parse(q.options);
+          optionsArray = Array.isArray(parsed) ? parsed.map(String) : [q.options];
+        } catch {
+          optionsArray = [q.options];
+        }
+      }
+
+      let answerIndex = 0;
+      if (typeof q.answer === "number") {
+        answerIndex = q.answer;
+      } else if (typeof q.answer === "string") {
+        const parsedInt = parseInt(q.answer, 10);
+        if (!isNaN(parsedInt)) {
+          answerIndex = parsedInt;
+        } else {
+          const code = q.answer.trim().toUpperCase().charCodeAt(0) - 65;
+          answerIndex = code >= 0 && code < 4 ? code : 0;
+        }
+      }
+
       await pool.query(
         "INSERT INTO public.quizzes (item_id, question, options, answer, explanation) VALUES ($1, $2, $3, $4, $5)",
-        [itemId, q.question, q.options, q.answer, q.explanation],
+        [itemId, q.question || "Quiz Question", optionsArray, answerIndex, q.explanation || ""],
       );
     }
 
@@ -747,10 +781,37 @@ app.post("/api/items/youtube", authenticateUser, async (req, res) => {
     }
 
     // 5. Insert Quizzes
-    for (const q of quiz) {
+    for (const q of (quiz || [])) {
+      let optionsArray = [];
+      if (Array.isArray(q.options)) {
+        optionsArray = q.options.map(String);
+      } else if (typeof q.options === "object" && q.options !== null) {
+        optionsArray = Object.values(q.options).map(String);
+      } else if (typeof q.options === "string") {
+        try {
+          const parsed = JSON.parse(q.options);
+          optionsArray = Array.isArray(parsed) ? parsed.map(String) : [q.options];
+        } catch {
+          optionsArray = [q.options];
+        }
+      }
+
+      let answerIndex = 0;
+      if (typeof q.answer === "number") {
+        answerIndex = q.answer;
+      } else if (typeof q.answer === "string") {
+        const parsedInt = parseInt(q.answer, 10);
+        if (!isNaN(parsedInt)) {
+          answerIndex = parsedInt;
+        } else {
+          const code = q.answer.trim().toUpperCase().charCodeAt(0) - 65;
+          answerIndex = code >= 0 && code < 4 ? code : 0;
+        }
+      }
+
       await pool.query(
         "INSERT INTO public.quizzes (item_id, question, options, answer, explanation) VALUES ($1, $2, $3, $4, $5)",
-        [itemId, q.question, q.options, q.answer, q.explanation],
+        [itemId, q.question || "Quiz Question", optionsArray, answerIndex, q.explanation || ""],
       );
     }
 
@@ -1156,6 +1217,192 @@ app.post("/api/items/:id/briefing", authenticateUser, verifyItemOwnership, async
   } catch (e) {
     console.error("Briefing generation failed:", e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// 14. RAG QUIZ GENERATOR
+app.post("/api/items/:id/quiz/generate", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const { topic, num_questions, difficulty, selectedSourceIds } = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
+      ? selectedSourceIds.join(",")
+      : id;
+
+    console.log(`🎯 Generating RAG Quiz for items [${ragItemId}] | Topic: "${topic || "General"}" | Difficulty: ${difficulty || "medium"}...`);
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/generate-quiz`, {
+      item_id: ragItemId,
+      topic: topic || "",
+      num_questions: num_questions || 5,
+      difficulty: difficulty || "medium",
+      profile_id: req.user.id,
+    });
+
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Quiz generation failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    const errorDetail = e.response?.data?.detail || e.message;
+    res.status(statusCode).json({ error: errorDetail });
+  }
+});
+
+// 15. RAG QUIZ SUBMIT & EVALUATE
+app.post("/api/items/:id/quiz/submit", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const { session_id, answers } = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+  if (!session_id) return res.status(400).json({ error: "session_id is required" });
+
+  try {
+    console.log(`📝 Evaluating Quiz Submission for session [${session_id}]...`);
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/evaluate-quiz`, {
+      session_id,
+      answers: answers || {},
+      profile_id: req.user.id,
+    });
+
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Quiz evaluation failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    const errorDetail = e.response?.data?.detail || e.message;
+    res.status(statusCode).json({ error: errorDetail });
+  }
+});
+
+// 16. TUTOR MODE ENDPOINTS
+// A. Outline Generation
+app.post("/api/items/:id/tutor/outline", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const { selectedSourceIds } = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
+      ? selectedSourceIds.join(",")
+      : id;
+
+    console.log(`🎓 Generating Tutor Outline for items [${ragItemId}]...`);
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/tutor/outline`, {
+      item_id: ragItemId,
+      profile_id: req.user.id,
+    });
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Tutor outline failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    res.status(statusCode).json({ error: e.response?.data?.detail || e.message });
+  }
+});
+
+// B. Step Generation (One activity at a time)
+app.post("/api/items/:id/tutor/step", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const { section_id, section_title, step_index, total_steps, selectedSourceIds } = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
+      ? selectedSourceIds.join(",")
+      : id;
+
+    console.log(`🎓 Generating Tutor Step ${step_index} for section "${section_title}"...`);
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/tutor/step`, {
+      item_id: ragItemId,
+      section_id: section_id || "sec-1",
+      section_title: section_title || "General Concepts",
+      step_index: step_index || 0,
+      total_steps: total_steps || 5,
+      profile_id: req.user.id,
+    });
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Tutor step failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    res.status(statusCode).json({ error: e.response?.data?.detail || e.message });
+  }
+});
+
+// C. Evaluate Activity
+app.post("/api/items/:id/tutor/evaluate", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const { activity, user_answer } = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/tutor/evaluate`, {
+      activity: activity || {},
+      user_answer,
+      profile_id: req.user.id,
+    });
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Tutor evaluation failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    res.status(statusCode).json({ error: e.response?.data?.detail || e.message });
+  }
+});
+
+// D. Contextual Follow-up Q&A
+app.post("/api/items/:id/tutor/followup", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const { concept_title, question, selectedSourceIds } = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
+      ? selectedSourceIds.join(",")
+      : id;
+
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/tutor/followup`, {
+      item_id: ragItemId,
+      concept_title: concept_title || "Concept",
+      question: question || "",
+      profile_id: req.user.id,
+    });
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Tutor followup failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    res.status(statusCode).json({ error: e.response?.data?.detail || e.message });
+  }
+});
+
+// E. Save Session Progress
+app.post("/api/items/:id/tutor/session/save", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  const sessionData = req.body || {};
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const fastApiRes = await axios.post(`${FASTAPI_URL}/tutor/session/save`, {
+      ...sessionData,
+      item_id: id,
+      profile_id: req.user.id,
+    });
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Tutor save failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    res.status(statusCode).json({ error: e.response?.data?.detail || e.message });
+  }
+});
+
+// F. Get Latest Session for Document
+app.get("/api/items/:id/tutor/session", authenticateUser, verifyItemOwnership, async (req, res) => {
+  const { id } = req.params;
+  if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
+
+  try {
+    const fastApiRes = await axios.get(`${FASTAPI_URL}/tutor/session/item/${id}`);
+    res.json(fastApiRes.data);
+  } catch (e) {
+    console.error("Tutor get session failed:", e.response?.data?.detail || e.message);
+    const statusCode = e.response?.status || 500;
+    res.status(statusCode).json({ error: e.response?.data?.detail || e.message });
   }
 });
 

@@ -16,9 +16,17 @@ from fastapi import FastAPI, UploadFile, Form, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 import uvicorn
 import pypdf
 import edge_tts
+from quiz_service import generate_rag_quiz, evaluate_quiz_submission
+from tutor_service import (
+    generate_tutor_outline,
+    generate_tutor_step,
+    evaluate_tutor_activity,
+    answer_tutor_followup,
+)
 
 # Load environment variables
 load_dotenv(dotenv_path="../.env")
@@ -163,7 +171,8 @@ def get_embedding(text: str, fast: bool = False) -> list:
         vec = vec / norm
     return vec.tolist()
 
-def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = False, chat_history: list = None, timeout: int = 35) -> str:
+def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = False, chat_history: list = None, timeout: int = 35, system_prompt: str = None, **kwargs) -> str:
+    system_instruction = system_instruction or system_prompt
     """
     Executes an LLM completion request with multi-provider failover:
     1. Google Gemini REST API (gemini-2.5-flash / gemini-flash-latest / gemini-2.0-flash)
@@ -244,7 +253,8 @@ def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = Fals
 
     raise RuntimeError("All configured AI providers failed or are unavailable.")
 
-def call_llm_stream(prompt: str, system_instruction: str = None, chat_history: list = None, timeout: int = 35):
+def call_llm_stream(prompt: str, system_instruction: str = None, chat_history: list = None, timeout: int = 35, system_prompt: str = None, **kwargs):
+    system_instruction = system_instruction or system_prompt
     """
     Yields streamed text tokens from Google Gemini REST streaming API or OpenRouter with fallback.
     """
@@ -481,17 +491,32 @@ def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: s
         cur = conn.cursor()
         clean_title = title or "Study Resource"
 
-        # Ensure parent item exists
-        cur.execute(
-            """
-            INSERT INTO public.study_items (id, title, kind, file_name, content)
-            VALUES (%s::uuid, %s, %s, %s, %s)
-            ON CONFLICT (id) DO UPDATE SET
-                content = EXCLUDED.content,
-                title = COALESCE(NULLIF(EXCLUDED.title, ''), study_items.title)
-            """,
-            (item_id, clean_title, kind, file_name or clean_title, content or "")
-        )
+        # Ensure parent item exists / update content
+        cur.execute("SELECT id FROM public.study_items WHERE id = %s::uuid", (item_id,))
+        exists = cur.fetchone()
+        if exists:
+            cur.execute(
+                """
+                UPDATE public.study_items
+                SET content = %s,
+                    title = COALESCE(NULLIF(%s, ''), title),
+                    file_name = COALESCE(NULLIF(%s, ''), file_name)
+                WHERE id = %s::uuid
+                """,
+                (content or "", clean_title, file_name or clean_title, item_id)
+            )
+        else:
+            cur.execute("SELECT id FROM auth.users LIMIT 1")
+            user_row = cur.fetchone()
+            fallback_user_id = user_row[0] if user_row else None
+            if fallback_user_id:
+                cur.execute(
+                    """
+                    INSERT INTO public.study_items (id, title, kind, file_name, content, profile_id)
+                    VALUES (%s::uuid, %s, %s, %s, %s, %s::uuid)
+                    """,
+                    (item_id, clean_title, kind, file_name or clean_title, content or "", fallback_user_id)
+                )
 
         # Clear previous chunks for this item if re-ingesting
         cur.execute("DELETE FROM public.document_chunks WHERE item_id = %s::uuid", (item_id,))
@@ -1585,6 +1610,365 @@ Context:
         return {"briefing_doc": briefing_markdown}
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+# ============================================================
+# Dedicated RAG Quiz Generator Module
+# ============================================================
+class QuizGeneratePayload(BaseModel):
+    item_id: str
+    topic: Optional[str] = None
+    num_questions: int = 5
+    difficulty: str = "medium"
+    profile_id: Optional[str] = None
+
+class QuizEvaluatePayload(BaseModel):
+    session_id: str
+    answers: Dict[str, Any]
+    profile_id: Optional[str] = None
+
+@app.post("/generate-quiz")
+async def generate_quiz_endpoint(payload: QuizGeneratePayload):
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+
+    try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
+        
+        full_questions = generate_rag_quiz(
+            conn=conn,
+            get_embedding_fn=get_embedding,
+            call_llm_fn=call_llm,
+            item_ids=item_ids,
+            topic=payload.topic,
+            num_questions=payload.num_questions,
+            difficulty=payload.difficulty
+        )
+
+        session_id = str(uuid.uuid4())
+        primary_item_id = item_ids[0]
+
+        # Save session to database
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """
+                INSERT INTO public.quiz_sessions (id, profile_id, item_id, topic, difficulty, num_questions, questions, total_questions)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (session_id, payload.profile_id, primary_item_id, payload.topic or "", payload.difficulty, len(full_questions), json.dumps(full_questions), len(full_questions))
+            )
+            conn.commit()
+        except Exception as dbe:
+            print(f"[QuizService] Warning saving quiz session: {dbe}")
+            conn.rollback()
+
+        # Sanitize questions: strip answer and explanation before sending to frontend!
+        sanitized_questions = []
+        for q in full_questions:
+            sanitized_questions.append({
+                "id": q["id"],
+                "question": q["question"],
+                "options": q["options"],
+                "source_reference": q.get("source_reference", {})
+            })
+
+        return {
+            "session_id": session_id,
+            "item_id": primary_item_id,
+            "topic": payload.topic or "",
+            "difficulty": payload.difficulty,
+            "num_questions": len(sanitized_questions),
+            "questions": sanitized_questions
+        }
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/evaluate-quiz")
+async def evaluate_quiz_endpoint(payload: QuizEvaluatePayload):
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT questions, profile_id
+            FROM public.quiz_sessions
+            WHERE id = %s
+            """,
+            (payload.session_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Quiz session not found")
+
+        stored_questions = row[0]
+        if isinstance(stored_questions, str):
+            stored_questions = json.loads(stored_questions)
+
+        evaluation = evaluate_quiz_submission(stored_questions, payload.answers)
+
+        # Update quiz session record in database
+        try:
+            cur.execute(
+                """
+                UPDATE public.quiz_sessions
+                SET user_answers = %s, score = %s, total_questions = %s, completed_at = now()
+                WHERE id = %s
+                """,
+                (json.dumps(payload.answers), evaluation["score"], evaluation["total_questions"], payload.session_id)
+            )
+            conn.commit()
+        except Exception as dbe:
+            print(f"[QuizService] Warning updating quiz evaluation: {dbe}")
+            conn.rollback()
+
+        return {
+            "session_id": payload.session_id,
+            **evaluation
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+# -------------------------------------------------------------
+# TUTOR MODE ENDPOINTS (Sequential Grounded Learning)
+# -------------------------------------------------------------
+class TutorOutlinePayload(BaseModel):
+    item_id: str
+    profile_id: Optional[str] = None
+
+class TutorStepPayload(BaseModel):
+    item_id: str
+    section_id: str
+    section_title: str
+    step_index: int = 0
+    total_steps: int = 5
+    profile_id: Optional[str] = None
+
+class TutorEvaluatePayload(BaseModel):
+    activity: Dict[str, Any]
+    user_answer: Any
+    profile_id: Optional[str] = None
+
+class TutorFollowupPayload(BaseModel):
+    item_id: str
+    concept_title: str
+    question: str
+    profile_id: Optional[str] = None
+
+class TutorSessionSavePayload(BaseModel):
+    session_id: Optional[str] = None
+    item_id: str
+    profile_id: Optional[str] = None
+    outline: List[Dict[str, Any]]
+    current_section_idx: int = 0
+    current_step_idx: int = 0
+    completed_activities: int = 0
+    total_activities: int = 0
+    accuracy: int = 0
+    session_history: List[Dict[str, Any]] = []
+    status: str = "active"
+
+@app.post("/tutor/outline")
+async def tutor_outline_endpoint(payload: TutorOutlinePayload):
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
+        outline = generate_tutor_outline(conn, item_ids, call_llm)
+        return {"item_id": payload.item_id, "outline": outline}
+    except Exception as e:
+        print(f"[TutorService] Error generating outline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/tutor/step")
+async def tutor_step_endpoint(payload: TutorStepPayload):
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
+        step_data = generate_tutor_step(
+            conn=conn,
+            item_ids=item_ids,
+            section_title=payload.section_title,
+            step_index=payload.step_index,
+            total_steps=payload.total_steps,
+            call_llm_fn=call_llm,
+            get_embedding_fn=get_embedding,
+        )
+        return step_data
+    except Exception as e:
+        print(f"[TutorService] Error generating tutor step: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/tutor/evaluate")
+async def tutor_evaluate_endpoint(payload: TutorEvaluatePayload):
+    try:
+        evaluation = evaluate_tutor_activity(
+            stored_activity=payload.activity,
+            user_answer=payload.user_answer,
+            call_llm_fn=call_llm,
+        )
+        return evaluation
+    except Exception as e:
+        print(f"[TutorService] Error evaluating activity: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tutor/followup")
+async def tutor_followup_endpoint(payload: TutorFollowupPayload):
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
+        answer = answer_tutor_followup(
+            conn=conn,
+            item_ids=item_ids,
+            concept_title=payload.concept_title,
+            user_question=payload.question,
+            call_llm_fn=call_llm,
+            get_embedding_fn=get_embedding,
+        )
+        return {"answer": answer}
+    except Exception as e:
+        print(f"[TutorService] Error in follow-up: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@app.post("/tutor/session/save")
+async def tutor_session_save_endpoint(payload: TutorSessionSavePayload):
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    try:
+        cur = conn.cursor()
+        sess_id = payload.session_id or str(uuid.uuid4())
+        primary_item_id = payload.item_id.split(",")[0].strip()
+
+        cur.execute(
+            """
+            INSERT INTO public.tutor_sessions (
+                id, profile_id, item_id, outline, current_section_idx, current_step_idx,
+                completed_activities, total_activities, accuracy, session_history, status, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+            ON CONFLICT (id) DO UPDATE SET
+                current_section_idx = EXCLUDED.current_section_idx,
+                current_step_idx = EXCLUDED.current_step_idx,
+                completed_activities = EXCLUDED.completed_activities,
+                total_activities = EXCLUDED.total_activities,
+                accuracy = EXCLUDED.accuracy,
+                session_history = EXCLUDED.session_history,
+                status = EXCLUDED.status,
+                updated_at = now()
+            RETURNING id, current_section_idx, current_step_idx, completed_activities, total_activities, accuracy, status
+            """,
+            (
+                sess_id,
+                payload.profile_id,
+                primary_item_id if not primary_item_id.startswith("default") else None,
+                json.dumps(payload.outline),
+                payload.current_section_idx,
+                payload.current_step_idx,
+                payload.completed_activities,
+                payload.total_activities,
+                payload.accuracy,
+                json.dumps(payload.session_history),
+                payload.status,
+            ),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return {
+            "session_id": row[0],
+            "current_section_idx": row[1],
+            "current_step_idx": row[2],
+            "completed_activities": row[3],
+            "total_activities": row[4],
+            "accuracy": row[5],
+            "status": row[6],
+        }
+    except Exception as e:
+        print(f"[TutorService] Session save error: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@app.get("/tutor/session/item/{item_id}")
+async def tutor_get_latest_session_endpoint(item_id: str):
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    try:
+        cur = conn.cursor()
+        primary_id = item_id.split(",")[0].strip()
+        cur.execute(
+            """
+            SELECT id, profile_id, item_id, outline, current_section_idx, current_step_idx,
+                   completed_activities, total_activities, accuracy, session_history, status, updated_at
+            FROM public.tutor_sessions
+            WHERE item_id = %s
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (primary_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"session": None}
+        return {
+            "session": {
+                "id": str(row[0]),
+                "profile_id": str(row[1]) if row[1] else None,
+                "item_id": str(row[2]) if row[2] else None,
+                "outline": row[3] if isinstance(row[3], list) else json.loads(row[3]),
+                "current_section_idx": row[4],
+                "current_step_idx": row[5],
+                "completed_activities": row[6],
+                "total_activities": row[7],
+                "accuracy": row[8],
+                "session_history": row[9] if isinstance(row[9], list) else json.loads(row[9]),
+                "status": row[10],
+                "updated_at": row[11].isoformat() if row[11] else None,
+            }
+        }
+    except Exception as e:
+        print(f"[TutorService] Error getting session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if conn:

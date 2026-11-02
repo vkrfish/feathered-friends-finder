@@ -705,7 +705,32 @@ function Index() {
   useEffect(() => {
     let isMounted = true;
 
-    // Check existing session
+    // 1. Immediately extract tokens from URL hash if returning from OAuth
+    if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        supabase.auth
+          .setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          .then(({ data }) => {
+            if (data?.session && isMounted) {
+              navigate({ to: "/dashboard" });
+            }
+          })
+          .catch((err) => {
+            console.error("Failed to set session from OAuth hash:", err);
+            if (isMounted) setIsAuthenticating(false);
+          });
+        return;
+      }
+    }
+
+    // 2. Check existing session
     supabase.auth
       .getSession()
       .then(({ data: { session } }) => {
@@ -720,7 +745,7 @@ function Index() {
         if (isMounted) setIsAuthenticating(false);
       });
 
-    // Listen for auth state change (especially when Supabase finishes parsing #access_token from URL)
+    // 3. Listen for auth state change
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
