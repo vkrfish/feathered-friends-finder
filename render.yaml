@@ -1,31 +1,43 @@
 services:
+  # ============================================================
+  # 1. AI RAG & Vector Compute Engine (Python FastAPI)
+  # ============================================================
   - type: web
-    name: backend-fastapi
-    env: python
-    region: ohio
-    plan: free
+    name: learnx-fastapi
+    runtime: python
     rootDir: backend-fastapi
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
 
+  # ============================================================
+  # 2. API Gateway & Multi-Tenant Orchestrator (Node.js)
+  # ============================================================
   - type: web
-    name: backend-node-gateway
-    env: node
-    region: ohio
-    plan: free
+    name: learnx-node-gateway
+    runtime: node
     rootDir: backend-node
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server.js
     envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
       - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: FASTAPI_URL
         fromService:
           type: web
-          name: backend-fastapi
-          envVarKey: RENDER_EXTERNAL_URL
+          name: learnx-fastapi
+          property: host

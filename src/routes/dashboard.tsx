@@ -2,6 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../integrations/supabase/client";
 
+const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:3001";
+const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_URL || "http://localhost:8000";
+
 // Authenticated fetch helper
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const {
@@ -180,7 +183,7 @@ export default function DashboardPage() {
   const fetchItems = async (isChangeMode = false) => {
     if (useRealBackend) {
       try {
-        const res = await fetchWithAuth("http://localhost:3001/api/items");
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items`);
         if (!res.ok) throw new Error("Failed to fetch");
         const allItems: StudyItem[] = await res.json();
         setBackendOffline(false);
@@ -200,7 +203,7 @@ export default function DashboardPage() {
           }
 
           // Fetch active notebook detail (with chat history, notes, etc.)
-          const nbDetailRes = await fetchWithAuth(`http://localhost:3001/api/items/${activeNotebookId}`);
+          const nbDetailRes = await fetchWithAuth(`${API_BASE_URL}/api/items/${activeNotebookId}`);
           if (nbDetailRes.ok) {
             const nbDetail = await nbDetailRes.json();
             setActiveNotebook(nbDetail);
@@ -370,7 +373,7 @@ export default function DashboardPage() {
 
     if (useRealBackend && !backendOffline) {
       try {
-        const res = await fetchWithAuth("http://localhost:3001/api/notebooks", {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/notebooks`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: finalTitle }),
@@ -429,7 +432,7 @@ export default function DashboardPage() {
 
     if (useRealBackend && !backendOffline) {
       try {
-        const res = await fetchWithAuth(`http://localhost:3001/api/notebooks/${id}`, {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/notebooks/${id}`, {
           method: "DELETE",
         });
         if (!res.ok) throw new Error("Delete failed");
@@ -485,7 +488,7 @@ export default function DashboardPage() {
       // 1. Try Node API Gateway
       if (useRealBackend && !backendOffline) {
         try {
-          const res = await fetchWithAuth("http://localhost:3001/api/items/file", {
+          const res = await fetchWithAuth(`${API_BASE_URL}/api/items/file`, {
             method: "POST",
             body: formData,
           });
@@ -512,7 +515,7 @@ export default function DashboardPage() {
           fastApiFormData.append("file", file);
           fastApiFormData.append("item_id", itemId);
 
-          const fRes = await fetch("http://localhost:8000/process-pdf", {
+          const fRes = await fetch(`${FASTAPI_BASE_URL}/process-pdf`, {
             method: "POST",
             body: fastApiFormData,
           });
@@ -605,7 +608,7 @@ export default function DashboardPage() {
     runSimulatedAnalysis(ytLogs, async () => {
       if (useRealBackend && !backendOffline) {
         try {
-          const res = await fetchWithAuth("http://localhost:3001/api/items/youtube", {
+          const res = await fetchWithAuth(`${API_BASE_URL}/api/items/youtube`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url, notebook_id: activeNotebookId }),
@@ -673,7 +676,7 @@ export default function DashboardPage() {
     runSimulatedAnalysis(siteLogs, async () => {
       if (useRealBackend && !backendOffline) {
         try {
-          const res = await fetchWithAuth("http://localhost:3001/api/items/website", {
+          const res = await fetchWithAuth(`${API_BASE_URL}/api/items/website`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url, notebook_id: activeNotebookId }),
@@ -735,7 +738,7 @@ export default function DashboardPage() {
     runSimulatedAnalysis(textLogs, async () => {
       if (useRealBackend && !backendOffline) {
         try {
-          const res = await fetchWithAuth("http://localhost:3001/api/items/text", {
+          const res = await fetchWithAuth(`${API_BASE_URL}/api/items/text`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: inputText, notebook_id: activeNotebookId }),
@@ -800,7 +803,7 @@ export default function DashboardPage() {
     runSimulatedAnalysis(researchLogs, async () => {
       if (useRealBackend && !backendOffline) {
         try {
-          const res = await fetchWithAuth("http://localhost:3001/api/items/research", {
+          const res = await fetchWithAuth(`${API_BASE_URL}/api/items/research`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ topic, notebook_id: activeNotebookId }),
@@ -854,7 +857,7 @@ export default function DashboardPage() {
 
     if (useRealBackend && !backendOffline) {
       try {
-        const res = await fetchWithAuth(`http://localhost:3001/api/items/${id}`, {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${id}`, {
           method: "DELETE",
         });
         if (!res.ok) throw new Error("Delete failed");
@@ -1446,7 +1449,7 @@ function StudySessionPanel({
     onUpdateNotebook({ ...notebook, notes: notesText });
     if (useRealBackend) {
       try {
-        await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/notes`, {
+        await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/notes`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ notes: notesText }),
@@ -1492,7 +1495,7 @@ function StudySessionPanel({
   const pinMessage = async (content: string) => {
     if (useRealBackend) {
       try {
-        const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/pins`, {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/pins`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content }),
@@ -1518,7 +1521,7 @@ function StudySessionPanel({
   const deletePin = async (pinId: string) => {
     if (useRealBackend) {
       try {
-        await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/pins/${pinId}`, {
+        await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/pins/${pinId}`, {
           method: "DELETE",
         });
         const currentPins = notebook.pinnedNotes || [];
@@ -1616,7 +1619,7 @@ function StudySessionPanel({
       const uniqueSourceIds = Array.from(new Set(selectedSourceIds));
 
       try {
-        const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/chat?stream=true`, {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/chat?stream=true`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1641,7 +1644,7 @@ function StudySessionPanel({
       // Try contacting FastAPI directly at http://localhost:8000/chat
       if (!streamSuccess) {
         try {
-          const fastApiRes = await fetch("http://localhost:8000/chat", {
+          const fastApiRes = await fetch(`${FASTAPI_BASE_URL}/chat`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -1748,7 +1751,7 @@ function StudySessionPanel({
     toast.info("Generating Briefing Doc summarizing selected sources...");
     try {
       if (useRealBackend) {
-        const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/briefing`, {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/briefing`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ selectedSourceIds }),
@@ -1791,7 +1794,7 @@ function StudySessionPanel({
       const h2Name = edgeVoices.find((v) => v.id === voice2Name)?.name?.split(" ")[0] || "Host 2";
 
       if (useRealBackend) {
-        const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/podcast`, {
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/podcast`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1840,7 +1843,7 @@ function StudySessionPanel({
 
     const h1Name = edgeVoices.find((v) => v.id === voice1Name)?.name?.split(" ")[0] || "Host 1";
     const h2Name = edgeVoices.find((v) => v.id === voice2Name)?.name?.split(" ")[0] || "Host 2";
-    const audioUrl = `http://localhost:8000/tts-full/${notebook.id}?voice1=${voice1Name}&voice2=${voice2Name}&h1Name=${encodeURIComponent(h1Name)}&h2Name=${encodeURIComponent(h2Name)}`;
+    const audioUrl = `${FASTAPI_BASE_URL}/tts-full/${notebook.id}?voice1=${voice1Name}&voice2=${voice2Name}&h1Name=${encodeURIComponent(h1Name)}&h2Name=${encodeURIComponent(h2Name)}`;
 
     const audio = new Audio(audioUrl);
     currentAudioRef.current = audio;
@@ -1961,7 +1964,7 @@ function StudySessionPanel({
                   pdfViewMode === "original" ? (
                     (() => {
                       const staticServerUrl = previewSource.fileName
-                        ? `http://localhost:3001/api/items/${previewSource.id}/file`
+                        ? `${API_BASE_URL}/api/items/${previewSource.id}/file`
                         : null;
                       const basePdfSrc = pdfBlobUrl(previewSource.id) || previewSource.localFileUrl || staticServerUrl;
                       const pdfSrc = basePdfSrc
@@ -3012,7 +3015,7 @@ function StudySessionPanel({
                             <button onClick={playPodcast} className="bg-white text-black px-3 py-1.5 rounded-full font-bold flex items-center gap-1"><Play className="h-2.5 w-2.5 fill-current" /> Listen</button>
                           )}
                           <a
-                            href={`http://localhost:8000/tts-full/${notebook.id}?voice1=${voice1Name}&voice2=${voice2Name}`}
+                            href={`${FASTAPI_BASE_URL}/tts-full/${notebook.id}?voice1=${voice1Name}&voice2=${voice2Name}`}
                             download
                             target="_blank"
                             rel="noopener noreferrer"

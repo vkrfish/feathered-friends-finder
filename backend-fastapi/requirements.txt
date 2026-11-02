@@ -10,3 +10,4 @@ requests>=2.32.3
 numpy>=1.26.0
 python-multipart>=0.0.9
 edge-tts>=6.1.12
+youtube-transcript-api>=0.6.2
