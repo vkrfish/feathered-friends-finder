@@ -495,7 +495,7 @@ export default function DashboardPage() {
             setAnalysisLogs((prev) => [...prev, "⚡ Vector processing and index complete!"]);
             setAnalysisProgress(95);
             await fetchItems();
-            setSelectedSourceIds((prev) => [...prev, data.id]);
+            setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
             toast.success(`Indexed successfully: ${file.name}`);
             uploadedSuccessfully = true;
           }
@@ -617,7 +617,7 @@ export default function DashboardPage() {
           setAnalysisProgress(95);
 
           await fetchItems();
-          setSelectedSourceIds((prev) => [...prev, data.id]);
+          setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
           toast.success("YouTube video ingested!");
         } catch (e) {
           toast.error("YouTube ingestion failed.");
@@ -685,7 +685,7 @@ export default function DashboardPage() {
           setAnalysisProgress(95);
 
           await fetchItems();
-          setSelectedSourceIds((prev) => [...prev, data.id]);
+          setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
           toast.success("Website scraped & saved!");
         } catch (e) {
           toast.error("Website scraping failed.");
@@ -747,7 +747,7 @@ export default function DashboardPage() {
           setAnalysisProgress(95);
 
           await fetchItems();
-          setSelectedSourceIds((prev) => [...prev, data.id]);
+          setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
           toast.success("Notes saved to notebook!");
         } catch (e) {
           toast.error("Pasted text save failed.");
@@ -812,7 +812,7 @@ export default function DashboardPage() {
           setAnalysisProgress(95);
 
           await fetchItems();
-          setSelectedSourceIds((prev) => [...prev, data.id]);
+          setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
           toast.success("Deep research report synthesized!");
         } catch (e) {
           toast.error("Deep research agent failed.");
@@ -1314,6 +1314,7 @@ function StudySessionPanel({
   // Chat states
   const [chatInput, setChatInput] = useState("");
   const [isBotTyping, setIsBotTyping] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // Spaced repetition flashcards state
@@ -1367,7 +1368,7 @@ function StudySessionPanel({
   // Auto scroll chat
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [notebook.chatHistory, isBotTyping]);
+  }, [notebook.chatHistory, isBotTyping, streamingMessage]);
 
   // Read aloud source text
   const toggleTTS = (text: string) => {
@@ -1562,59 +1563,115 @@ function StudySessionPanel({
     });
     setChatInput("");
     setIsBotTyping(true);
+    setStreamingMessage("");
 
     const activeItems = sources.filter((s) => selectedSourceIds.includes(s.id));
     const activeContext = activeItems
       .map((s) => `[Source: ${s.title}]:\n${s.content || ""}`)
       .join("\n\n");
 
+    const handleStreamReader = async (response: Response): Promise<string> => {
+      if (!response.body) throw new Error("No response body");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let accumulated = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const dataStr = trimmed.slice(6).trim();
+          if (dataStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(dataStr);
+            const token = parsed.token ?? parsed.text ?? "";
+            if (token) {
+              accumulated += token;
+              setIsBotTyping(false);
+              setStreamingMessage(accumulated);
+            }
+          } catch {
+            if (dataStr && !dataStr.startsWith("{")) {
+              accumulated += dataStr;
+              setIsBotTyping(false);
+              setStreamingMessage(accumulated);
+            }
+          }
+        }
+      }
+      return accumulated;
+    };
+
     if (useRealBackend) {
+      let streamed = "";
+      let streamSuccess = false;
+      const uniqueSourceIds = Array.from(new Set(selectedSourceIds));
+
       try {
-        const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/chat`, {
+        const res = await fetchWithAuth(`http://localhost:3001/api/items/${notebook.id}/chat?stream=true`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+          },
           body: JSON.stringify({
             question: query,
-            selectedSourceIds,
+            selectedSourceIds: uniqueSourceIds,
             context: activeContext,
+            stream: true,
           }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          setIsBotTyping(false);
-          onUpdateNotebook({
-            ...notebook,
-            chatHistory: [...updatedHistory, { role: "assistant" as const, content: data.content }],
-          });
-          return;
+
+        if (res.ok && res.body) {
+          streamed = await handleStreamReader(res);
+          if (streamed) streamSuccess = true;
         }
       } catch (err) {
-        console.warn("Node gateway chat failed, trying direct FastAPI call...");
+        console.warn("Node gateway chat stream failed, trying direct FastAPI call...", err);
       }
 
       // Try contacting FastAPI directly at http://localhost:8000/chat
-      try {
-        const fastApiRes = await fetch("http://localhost:8000/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            item_id: selectedSourceIds.join(",") || notebook.id,
-            question: query,
-            chat_history: notebook.chatHistory || [],
-            context: activeContext,
-          }),
-        });
-        if (fastApiRes.ok) {
-          const data = await fastApiRes.json();
-          setIsBotTyping(false);
-          onUpdateNotebook({
-            ...notebook,
-            chatHistory: [...updatedHistory, { role: "assistant" as const, content: data.answer }],
+      if (!streamSuccess) {
+        try {
+          const fastApiRes = await fetch("http://localhost:8000/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "text/event-stream",
+            },
+            body: JSON.stringify({
+              item_id: uniqueSourceIds.join(",") || notebook.id,
+              question: query,
+              chat_history: notebook.chatHistory || [],
+              context: activeContext,
+              stream: true,
+            }),
           });
-          return;
+          if (fastApiRes.ok && fastApiRes.body) {
+            streamed = await handleStreamReader(fastApiRes);
+            if (streamed) streamSuccess = true;
+          }
+        } catch (fErr) {
+          console.warn("Direct FastAPI stream failed:", fErr);
         }
-      } catch (fErr) {
-        console.warn("Direct FastAPI chat failed:", fErr);
+      }
+
+      if (streamSuccess && streamed) {
+        setIsBotTyping(false);
+        setStreamingMessage(null);
+        onUpdateNotebook({
+          ...notebook,
+          chatHistory: [...updatedHistory, { role: "assistant" as const, content: streamed }],
+        });
+        return;
       }
     }
 
@@ -1673,6 +1730,7 @@ function StudySessionPanel({
       }
 
       setIsBotTyping(false);
+      setStreamingMessage(null);
       onUpdateNotebook({
         ...notebook,
         chatHistory: [
@@ -2432,7 +2490,98 @@ function StudySessionPanel({
                   </div>
                 ))}
 
-                {isBotTyping && (
+                {/* Active Real-Time Streaming Message Bubble */}
+                {streamingMessage !== null && streamingMessage.length > 0 && (
+                  <div className="flex gap-3 text-xs leading-relaxed justify-start">
+                    <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center font-bold text-[9px] text-primary shrink-0 select-none font-mono">
+                      AI
+                    </div>
+                    <div className="rounded-2xl border px-3.5 py-3 max-w-[85%] text-left relative bg-[#0b0c11] border-white/5 text-white/95 rounded-tl-none">
+                      <div className="space-y-2.5">
+                        {streamingMessage.split("\n").map((line, lidx, arr) => {
+                          const isLastLine = lidx === arr.length - 1;
+                          const cleanLine = line;
+
+                          const renderBold = (str: string) => {
+                            return str.split(/(\*\*.*?\*\*)/g).map((p, j) => {
+                              if (p.startsWith("**") && p.endsWith("**")) {
+                                return (
+                                  <strong key={j} className="font-semibold text-white">
+                                    {p.slice(2, -2)}
+                                  </strong>
+                                );
+                              }
+                              return <span key={j}>{p}</span>;
+                            });
+                          };
+
+                          const renderCitations = (text: string) => {
+                            const parts = text.split(/(\[Page \d+\])/g);
+                            return parts.map((part, i) => {
+                              const match = part.match(/\[Page (\d+)\]/);
+                              if (match) {
+                                const page = parseInt(match[1]);
+                                return (
+                                  <button
+                                    key={i}
+                                    onClick={() => {
+                                      const pdfSrc = sources.find(s => s.kind === "pdf");
+                                      if (pdfSrc) {
+                                        setActiveSourcePreviewId(pdfSrc.id);
+                                        setPdfViewMode("original");
+                                        setPdfPageNum(page);
+                                        toast.success(`Jumping to original PDF: ${pdfSrc.title} (Page ${page})`);
+                                      } else {
+                                        toast.info(`Cited content excerpt page ${page}.`);
+                                      }
+                                    }}
+                                    className="mx-1 align-baseline inline-flex items-center gap-0.5 bg-primary/10 hover:bg-primary/20 border border-primary/25 text-primary text-[8.5px] rounded-full px-2 py-0.5 transition-all font-mono font-bold"
+                                    title={`Jump to Page ${page}`}
+                                  >
+                                    <BookOpen className="h-2.5 w-2.5" />
+                                    <span>{page}</span>
+                                  </button>
+                                );
+                              }
+                              return <span key={i}>{renderBold(part)}</span>;
+                            });
+                          };
+
+                          if (cleanLine.startsWith("### ")) {
+                            return (
+                              <h5 key={lidx} className="font-bold text-white text-xs mt-3 uppercase tracking-wider text-primary font-mono flex items-center gap-1">
+                                <span>{renderCitations(cleanLine.replace("### ", ""))}</span>
+                                {isLastLine && (
+                                  <span className="inline-block w-1.5 h-3 bg-primary ml-1 animate-pulse align-middle rounded-xs" />
+                                )}
+                              </h5>
+                            );
+                          }
+                          if (cleanLine.startsWith("- ") || cleanLine.startsWith("* ")) {
+                            return (
+                              <li key={lidx} className="list-disc pl-4 text-white/70 ml-1 leading-relaxed text-[11.5px]">
+                                {renderCitations(cleanLine.replace(/^[-*]\s+/, ""))}
+                                {isLastLine && (
+                                  <span className="inline-block w-1.5 h-3 bg-primary ml-1 animate-pulse align-middle rounded-xs" />
+                                )}
+                              </li>
+                            );
+                          }
+                          return (
+                            <p key={lidx} className="mb-2 last:mb-0 leading-relaxed text-[11.5px] text-white/80">
+                              {renderCitations(cleanLine)}
+                              {isLastLine && (
+                                <span className="inline-block w-1.5 h-3 bg-primary ml-1 animate-pulse align-middle rounded-xs" />
+                              )}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {(isBotTyping || (streamingMessage !== null && streamingMessage.length === 0)) && (
                   <div className="flex gap-3 text-xs justify-start items-center">
                     <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center font-bold text-[9px] text-primary shrink-0 select-none animate-pulse font-mono">
                       AI

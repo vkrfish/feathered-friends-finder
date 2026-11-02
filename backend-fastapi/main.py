@@ -5,6 +5,7 @@ import hashlib
 import uuid
 import io
 import zipfile
+import asyncio
 import requests
 import numpy as np
 import psycopg2
@@ -171,7 +172,7 @@ def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = Fals
     """
     # 1. Try Gemini REST API
     if GEMINI_API_KEY:
-        gemini_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+        gemini_models = ["gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]
         for model_name in gemini_models:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
@@ -242,6 +243,207 @@ def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = Fals
             print(f"[WARNING] OpenRouter call error: {e}")
 
     raise RuntimeError("All configured AI providers failed or are unavailable.")
+
+def call_llm_stream(prompt: str, system_instruction: str = None, chat_history: list = None, timeout: int = 35):
+    """
+    Yields streamed text tokens from Google Gemini REST streaming API or OpenRouter with fallback.
+    """
+    # 1. Try Google Gemini REST Streaming
+    if GEMINI_API_KEY:
+        gemini_models = ["gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]
+        for model_name in gemini_models:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?key={GEMINI_API_KEY}&alt=sse"
+                raw_contents = []
+                if chat_history:
+                    for msg in chat_history:
+                        role = "user" if getattr(msg, "role", "") == "user" or (isinstance(msg, dict) and msg.get("role") == "user") else "model"
+                        content = getattr(msg, "content", "") if hasattr(msg, "content") else (msg.get("content", "") if isinstance(msg, dict) else str(msg))
+                        if content:
+                            raw_contents.append({"role": role, "parts": [{"text": content}]})
+
+                raw_contents.append({"role": "user", "parts": [{"text": prompt}]})
+
+                # Merge consecutive roles for Gemini API format compliance
+                contents = []
+                for item in raw_contents:
+                    if contents and contents[-1]["role"] == item["role"]:
+                        contents[-1]["parts"][0]["text"] += "\n" + item["parts"][0]["text"]
+                    else:
+                        contents.append(item)
+
+                payload = {"contents": contents}
+                if system_instruction:
+                    payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
+                res = requests.post(url, json=payload, stream=True, timeout=timeout)
+                if res.status_code == 200:
+                    yielded_any = False
+                    for line in res.iter_lines():
+                        if not line:
+                            continue
+                        line_str = line.decode("utf-8")
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                candidates = data.get("candidates", [])
+                                if candidates and "content" in candidates[0]:
+                                    parts = candidates[0]["content"].get("parts", [])
+                                    for part in parts:
+                                        text_chunk = part.get("text", "")
+                                        if text_chunk:
+                                            yielded_any = True
+                                            yield text_chunk
+                            except Exception:
+                                pass
+                    if yielded_any:
+                        return
+                else:
+                    print(f"[WARNING] Gemini Stream {model_name} returned status {res.status_code}: {res.text[:120]}")
+            except Exception as e:
+                print(f"[WARNING] Gemini Stream {model_name} call error: {e}")
+
+    # 2. Try OpenRouter Streaming
+    if OPENROUTER_API_KEY:
+        try:
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            messages = []
+            if system_instruction:
+                messages.append({"role": "system", "content": system_instruction})
+            if chat_history:
+                for msg in chat_history:
+                    role = "user" if getattr(msg, "role", "") == "user" or (isinstance(msg, dict) and msg.get("role") == "user") else "assistant"
+                    content = getattr(msg, "content", "") if hasattr(msg, "content") else (msg.get("content", "") if isinstance(msg, dict) else str(msg))
+                    if content:
+                        messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": prompt})
+
+            payload = {
+                "model": "google/gemini-2.5-flash",
+                "messages": messages,
+                "stream": True
+            }
+
+            res = requests.post(url, json=payload, headers=headers, stream=True, timeout=timeout)
+            if res.status_code == 200:
+                yielded_any = False
+                for line in res.iter_lines():
+                    if not line:
+                        continue
+                    line_str = line.decode("utf-8")
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            choices = data.get("choices", [])
+                            if choices and "delta" in choices[0]:
+                                chunk = choices[0]["delta"].get("content", "")
+                                if chunk:
+                                    yielded_any = True
+                                    yield chunk
+                        except Exception:
+                            pass
+                if yielded_any:
+                    return
+        except Exception as e:
+            print(f"[WARNING] OpenRouter stream error: {e}")
+
+    raise RuntimeError("All configured AI providers failed streaming.")
+
+# -------------------------------------------------------------
+# HELPER: Multilingual Detection & Translation Layer (Option 2)
+# -------------------------------------------------------------
+def is_non_english(text: str) -> bool:
+    """Detects if text contains significant non-Latin/Indic/CJK/Arabic characters."""
+    if not text:
+        return False
+    non_latin = re.findall(r'[\u0600-\u06FF\u0900-\u0D7F\u4E00-\u9FFF\u3040-\u30FF\u0400-\u04FF]', text)
+    return len(non_latin) > 20
+
+def translate_to_english(text: str) -> str:
+    """Translates regional language text to natural English using Gemini LLM."""
+    if not text or not is_non_english(text):
+        return text
+    try:
+        # Segment into chunks of ~5000 chars along word boundaries
+        words = text.split()
+        current_chunk = []
+        current_len = 0
+        chunks = []
+        for w in words:
+            current_chunk.append(w)
+            current_len += len(w) + 1
+            if current_len >= 5000:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = []
+                current_len = 0
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+
+        translated_parts = []
+        for segment in chunks[:6]:  # Translate up to ~30,000 characters
+            prompt = f"""Translate the following regional language text accurately into natural English. Retain all names, cricket terms, player names, technical concepts, numbers, and facts faithfully. Return ONLY the English translation without introductory remarks:
+
+{segment}"""
+            translated = call_llm(prompt, timeout=25)
+            translated = re.sub(r'^(?:Here is the translation|Translation|Here is an accurate translation[^:]*):\s*', '', translated, flags=re.IGNORECASE)
+            translated_parts.append(translated.strip())
+        return " ".join(translated_parts).strip()
+    except Exception as e:
+        print(f"[WARNING] Translation to English failed: {e}")
+        return text
+
+# -------------------------------------------------------------
+# HELPER: Multilingual Detection & Translation Layer (Option 2)
+# -------------------------------------------------------------
+def is_non_english(text: str) -> bool:
+    """Detects if text contains significant non-Latin/Indic/CJK/Arabic characters."""
+    if not text:
+        return False
+    non_latin = re.findall(r'[\u0600-\u06FF\u0900-\u0D7F\u4E00-\u9FFF\u3040-\u30FF\u0400-\u04FF]', text)
+    return len(non_latin) > 20
+
+def translate_to_english(text: str) -> str:
+    """Translates regional language text to natural English using Gemini LLM."""
+    if not text or not is_non_english(text):
+        return text
+    try:
+        # Segment into chunks of ~5000 chars along word boundaries
+        words = text.split()
+        current_chunk = []
+        current_len = 0
+        chunks = []
+        for w in words:
+            current_chunk.append(w)
+            current_len += len(w) + 1
+            if current_len >= 5000:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = []
+                current_len = 0
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+
+        translated_parts = []
+        for segment in chunks[:6]:  # Translate up to ~30,000 characters
+            prompt = f"""Translate the following regional language text accurately into natural English. Retain all names, cricket terms, player names, technical concepts, numbers, and facts faithfully. Return ONLY the English translation without introductory remarks:
+
+{segment}"""
+            translated = call_llm(prompt, timeout=25)
+            translated = re.sub(r'^(?:Here is the translation|Translation|Here is an accurate translation[^:]*):\s*', '', translated, flags=re.IGNORECASE)
+            translated_parts.append(translated.strip())
+        return " ".join(translated_parts).strip()
+    except Exception as e:
+        print(f"[WARNING] Translation to English failed: {e}")
+        return text
 
 # -------------------------------------------------------------
 # HELPER: Text Chunking Strategy
@@ -473,6 +675,18 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
 
         # 3. Insert Chunks with Embeddings into pgvector
         clean_title = file.filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
+
+        # Multilingual Option 2: Check for regional language in uploaded document
+        effective_content = full_text
+        if full_text.strip() and is_non_english(full_text):
+            print(f"[Document] Regional language detected in '{file.filename}'. Translating to English layer...")
+            english_doc = translate_to_english(full_text)
+            if english_doc and english_doc != full_text:
+                effective_content = english_doc
+                en_chunks = chunk_text(english_doc)
+                for idx, c in enumerate(en_chunks):
+                    page_chunks.append((item_id, idx + 1, f"[English Translation]:\n{c}"))
+
         if conn:
             insert_document_chunks_to_db(
                 conn,
@@ -480,12 +694,12 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
                 page_chunks=page_chunks,
                 title=clean_title,
                 file_name=file.filename,
-                content=full_text,
+                content=effective_content,
                 kind="pdf"
             )
 
         # 4. Generate flashcards and quizzes
-        materials = generate_study_materials(full_text, file.filename)
+        materials = generate_study_materials(effective_content, file.filename)
 
         return {
             "content": full_text,
@@ -538,22 +752,47 @@ async def process_youtube(payload: YoutubePayload):
     full_text = ""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
+        srt = None
+        # Support both new instance API (YouTubeTranscriptApi().fetch) and legacy static API
         try:
-            srt = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi', 'te', 'ta'])
-        except Exception:
-            srt = YouTubeTranscriptApi.get_transcript(video_id)
+            if hasattr(YouTubeTranscriptApi, 'get_transcript'):
+                try:
+                    srt = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi', 'te', 'ta', 'en-US'])
+                except Exception:
+                    srt = YouTubeTranscriptApi.get_transcript(video_id)
+            else:
+                api = YouTubeTranscriptApi()
+                try:
+                    srt = api.fetch(video_id, languages=['en', 'hi', 'te', 'ta', 'en-US'])
+                except Exception:
+                    try:
+                        srt = api.fetch(video_id)
+                    except Exception:
+                        transcript_list = api.list(video_id)
+                        srt = transcript_list.find_transcript(['en', 'hi', 'te', 'ta', 'en-US']).fetch()
+        except Exception as e1:
+            print(f"[YouTube] Primary transcript retrieval failed: {e1}. Trying fallback listing...")
+            try:
+                api = YouTubeTranscriptApi() if callable(YouTubeTranscriptApi) else YouTubeTranscriptApi
+                t_list = api.list(video_id) if hasattr(api, 'list') else YouTubeTranscriptApi.list_transcripts(video_id)
+                for t in t_list:
+                    srt = t.fetch()
+                    break
+            except Exception as e2:
+                print(f"[YouTube] Secondary transcript retrieval failed: {e2}")
 
-        for entry in srt:
-            seconds = entry.get('start', 0.0)
-            text = entry.get('text', '')
-            time_str = format_seconds(seconds)
-            transcript_data.append({
-                "text": text,
-                "time": time_str,
-                "seconds": int(seconds)
-            })
-            full_text += text + " "
-        print(f"[YouTube] Successfully fetched {len(transcript_data)} transcript segments for video {video_id}")
+        if srt:
+            for entry in srt:
+                seconds = entry.start if hasattr(entry, 'start') else (entry.get('start', 0.0) if isinstance(entry, dict) else 0.0)
+                text = entry.text if hasattr(entry, 'text') else (entry.get('text', '') if isinstance(entry, dict) else str(entry))
+                time_str = format_seconds(seconds)
+                transcript_data.append({
+                    "text": text,
+                    "time": time_str,
+                    "seconds": int(seconds)
+                })
+                full_text += text + " "
+            print(f"[YouTube] Successfully fetched {len(transcript_data)} transcript segments for video {video_id}")
     except Exception as e:
         print(f"[WARNING] YouTube transcript extraction failed for video {video_id}: {e}.")
 
@@ -564,11 +803,34 @@ async def process_youtube(payload: YoutubePayload):
     summary_content = f"### Study Session: {video_title}\n\n"
 
     if full_text.strip():
+        # Option 2: Multilingual Detection & Dual-Ingestion Translation Layer
+        english_text = ""
+        is_regional = is_non_english(full_text)
+        if is_regional:
+            print(f"[YouTube] Regional transcript detected for '{video_title}'. Translating to English layer...")
+            english_text = translate_to_english(full_text)
+            print(f"[YouTube] Successfully translated {len(english_text)} English characters.")
+
         # Store transcript chunks into pgvector
         page_chunks = []
-        chunks = chunk_text(full_text)
-        for idx, chunk in enumerate(chunks):
-            page_chunks.append((payload.item_id, idx + 1, chunk))
+        if is_regional and english_text.strip():
+            # Dual-ingestion: Store bilingual & English chunks for direct cross-lingual vector retrieval
+            en_chunks = chunk_text(english_text)
+            orig_chunks = chunk_text(full_text)
+
+            # 1. Primary English semantic chunks (match English questions directly)
+            for idx, c in enumerate(en_chunks):
+                page_chunks.append((payload.item_id, idx + 1, f"[English Translation]:\n{c}"))
+
+            # 2. Original regional transcript chunks (for regional questions & citations)
+            for idx, c in enumerate(orig_chunks):
+                page_chunks.append((payload.item_id, idx + 1, f"[Original Transcript]:\n{c}"))
+        else:
+            chunks = chunk_text(full_text)
+            for idx, chunk in enumerate(chunks):
+                page_chunks.append((payload.item_id, idx + 1, chunk))
+
+        effective_content = english_text if (is_regional and english_text.strip()) else full_text
 
         if conn:
             insert_document_chunks_to_db(
@@ -577,7 +839,7 @@ async def process_youtube(payload: YoutubePayload):
                 page_chunks=page_chunks,
                 title=video_title,
                 file_name=video_title,
-                content=full_text,
+                content=effective_content,
                 kind="youtube"
             )
 
@@ -585,7 +847,7 @@ async def process_youtube(payload: YoutubePayload):
         Analyze the following YouTube video transcript:
         Title: {video_title}
         Transcript Context:
-        {full_text[:8000]}
+        {effective_content[:8000]}
         
         Respond strictly in JSON format with four fields:
         1. "summary": A brief markdown summary outlining the key topics of the video.
@@ -626,6 +888,7 @@ async def process_youtube(payload: YoutubePayload):
         conn.close()
 
     return {
+        "title": video_title,
         "video_id": video_id,
         "content": summary_content,
         "chapters": chapters,
@@ -669,22 +932,34 @@ async def process_website(payload: UrlPayload):
     if not scraped_text:
         scraped_text = f"Scraped content from {payload.url}.\nFeatures modern web application components, documentation, and conceptual guides."
 
+    # Multilingual Option 2: Check for regional language
+    effective_text = scraped_text
+    if scraped_text.strip() and is_non_english(scraped_text):
+        english_web = translate_to_english(scraped_text)
+        if english_web and english_web != scraped_text:
+            effective_text = english_web
+
     # Store vector chunks into pgvector
     if conn:
         chunks = chunk_text(scraped_text)
         page_chunks = [(payload.item_id, idx + 1, c) for idx, c in enumerate(chunks)]
+        if effective_text != scraped_text:
+            en_chunks = chunk_text(effective_text)
+            for idx, c in enumerate(en_chunks):
+                page_chunks.append((payload.item_id, idx + 1, f"[English Translation]:\n{c}"))
+
         insert_document_chunks_to_db(
             conn,
             item_id=payload.item_id,
             page_chunks=page_chunks,
             title=title,
             file_name=payload.url,
-            content=scraped_text,
+            content=effective_text,
             kind="website"
         )
         conn.close()
 
-    materials = generate_study_materials(scraped_text, title)
+    materials = generate_study_materials(effective_text, title)
     return {
         "content": scraped_text,
         "flashcards": materials["flashcards"],
@@ -700,22 +975,34 @@ async def process_text(payload: TextPayload):
     validate_uuid_string(payload.item_id)
     conn = get_db_connection()
 
+    # Multilingual Option 2: Check for regional language in pasted notes
+    effective_text = payload.text
+    if payload.text.strip() and is_non_english(payload.text):
+        english_notes = translate_to_english(payload.text)
+        if english_notes and english_notes != payload.text:
+            effective_text = english_notes
+
     # Store vector chunks into pgvector
     if conn:
         chunks = chunk_text(payload.text)
         page_chunks = [(payload.item_id, idx + 1, c) for idx, c in enumerate(chunks)]
+        if effective_text != payload.text:
+            en_chunks = chunk_text(effective_text)
+            for idx, c in enumerate(en_chunks):
+                page_chunks.append((payload.item_id, idx + 1, f"[English Translation]:\n{c}"))
+
         insert_document_chunks_to_db(
             conn,
             item_id=payload.item_id,
             page_chunks=page_chunks,
             title="Pasted Notes",
             file_name="Pasted Notes",
-            content=payload.text,
+            content=effective_text,
             kind="text"
         )
         conn.close()
 
-    materials = generate_study_materials(payload.text, "Pasted Notes")
+    materials = generate_study_materials(effective_text, "Pasted Notes")
     return {
         "flashcards": materials["flashcards"],
         "quiz": materials["quiz"]
@@ -772,6 +1059,9 @@ Write in rich Markdown with clear headings (H2, H3), bullet points, and key take
 # -------------------------------------------------------------
 # API ENDPOINT: CHAT (RAG COSINE DISTANCE MATCHING)
 # -------------------------------------------------------------
+# Semaphore to cap concurrent AI requests at 30 to scale smoothly for 1,000+ users
+AI_CONCURRENCY_SEMAPHORE = asyncio.Semaphore(30)
+
 class ChatHistoryMessage(BaseModel):
     role: str
     content: str
@@ -781,6 +1071,7 @@ class ChatPayload(BaseModel):
     question: str
     chat_history: list[ChatHistoryMessage] = []
     context: str = ""
+    stream: bool = False
 
 @app.post("/chat")
 async def chat(payload: ChatPayload):
@@ -822,8 +1113,9 @@ Standalone Search Query:"""
                 page_numbers.append(int(m))
         page_numbers = list(set(page_numbers))
 
-        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
+        item_ids = list(dict.fromkeys([x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]))
         matches = []
+        matched_ids = set()
         context = ""
         item_kind = "document"
 
@@ -834,12 +1126,12 @@ Standalone Search Query:"""
             if page_numbers:
                 cur.execute(
                     """
-                    SELECT c.chunk_text, c.page_number, s.title, s.file_name
+                    SELECT c.chunk_text, c.page_number, s.title, s.file_name, c.item_id
                     FROM public.document_chunks c
                     JOIN public.study_items s ON c.item_id = s.id
                     WHERE c.item_id = ANY(%s::uuid[]) AND c.page_number = ANY(%s)
                     ORDER BY c.page_number ASC
-                    LIMIT 6
+                    LIMIT 8
                     """,
                     (item_ids, page_numbers)
                 )
@@ -850,23 +1142,26 @@ Standalone Search Query:"""
                 query_embedding = get_embedding(search_query, fast=False)
                 cur.execute(
                     """
-                    SELECT c.chunk_text, c.page_number, s.title, s.file_name, (c.embedding <=> %s::vector) AS distance
+                    SELECT c.chunk_text, c.page_number, s.title, s.file_name, c.item_id, (c.embedding <=> %s::vector) AS distance
                     FROM public.document_chunks c
                     JOIN public.study_items s ON c.item_id = s.id
                     WHERE c.item_id = ANY(%s::uuid[])
                     ORDER BY c.embedding <=> %s::vector ASC
-                    LIMIT 6
+                    LIMIT 8
                     """,
                     (query_embedding, item_ids, query_embedding)
                 )
                 raw_matches = cur.fetchall()
                 # Accept top nearest chunks
-                matches = raw_matches[:6]
+                matches = raw_matches[:8]
+
+            if matches:
+                matched_ids = {str(m[4]) for m in matches}
 
             # Priority 3: Retrieve full document summary/transcripts for context
             cur.execute(
                 """
-                SELECT kind, content, transcript, youtube_url, title, file_name
+                SELECT kind, content, transcript, youtube_url, title, file_name, id
                 FROM public.study_items
                 WHERE id = ANY(%s::uuid[])
                 """,
@@ -883,6 +1178,7 @@ Standalone Search Query:"""
                     context_parts.append(f"[Source: {source_name}, {page_label}]:\n{m[0]}")
 
             for row in rows:
+                row_id = str(row[6])
                 row_kind = row[0] or "document"
                 item_content = row[1] or ""
                 item_transcript = row[2]
@@ -891,8 +1187,10 @@ Standalone Search Query:"""
                 item_file_name = row[5] or item_title
                 source_name = item_file_name if row_kind == "pdf" else item_title
 
-                if item_content and item_content.strip() and not matches:
-                    context_parts.append(f"[Source Summary for '{source_name}']:\n{item_content[:3000]}")
+                # Include content/transcripts if this source was not present in vector matches
+                if row_id not in matched_ids or not matches:
+                    if item_content and item_content.strip():
+                        context_parts.append(f"[Source Overview for '{source_name}']:\n{item_content[:3000]}")
 
                 if item_transcript:
                     try:
@@ -902,7 +1200,8 @@ Standalone Search Query:"""
                             transcript_text = "\n".join(
                                 [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:40]]
                             )
-                            context_parts.append(f"[Video Transcript for '{source_name}']:\n{transcript_text}")
+                            if row_id not in matched_ids:
+                                context_parts.append(f"[Video Transcript for '{source_name}']:\n{transcript_text}")
                     except Exception:
                         pass
 
@@ -922,46 +1221,102 @@ Standalone Search Query:"""
             context = "No specific content was stored for the selected items."
 
         # 3. Build Prompt & Execute AI Generation
-        kind_label = {
-            "youtube": "YouTube video lecture",
-            "website": "web page",
-            "text": "pasted notes",
-            "research": "deep research report",
-            "pdf": "PDF document"
-        }.get(item_kind, "study resource")
+        if len(item_ids) > 1:
+            kind_label = f"multiple knowledge sources ({len(item_ids)} resources including documents, lectures, and notes)"
+        else:
+            kind_label = {
+                "youtube": "YouTube video lecture",
+                "website": "web page",
+                "text": "pasted notes",
+                "research": "deep research report",
+                "pdf": "PDF document"
+            }.get(item_kind, "study resource")
 
         system_instruction = f"""You are an expert, highly knowledgeable AI study assistant.
-The user is studying a {kind_label}.
+The user is studying {kind_label}.
 
 PRIMARY OBJECTIVES:
 1. Provide extremely clear, beautifully structured, and comprehensive answers.
-2. Directly answer the user's question using the provided source context.
-3. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents or `[MM:SS]` for videos (e.g., "The concept is defined as... [Page 2]").
-4. If the exact answer isn't fully covered in the context, seamlessly supplement using your vast AI knowledge while mentioning that you are supplementing with general knowledge.
-5. End with a friendly, conversational follow-up inviting deeper exploration."""
+2. Directly answer the user's question using the provided source context. When multiple resources are available, synthesize information across ALL provided sources.
+3. If the user asks about a specific resource or topic (e.g. YouTube video, mock interviews, Tech Vedhu, or document), locate that information in the retrieved context and answer it thoroughly.
+4. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents or `[MM:SS]` for videos (e.g., "The concept is defined as... [Page 2]" or "[01:30]").
+5. If the exact answer isn't fully covered in the context, seamlessly supplement using your vast AI knowledge while mentioning that you are supplementing with general knowledge.
+6. End with a friendly, conversational follow-up inviting deeper exploration."""
 
         user_prompt = f"""Retrieved Source Context:
 {context}
 
 Question: {payload.question}"""
 
-        try:
-            reply = call_llm(
-                prompt=user_prompt,
-                system_instruction=system_instruction,
-                chat_history=payload.chat_history,
-                timeout=30
+        if payload.stream:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+
+            async def generate_chat_stream():
+                async with AI_CONCURRENCY_SEMAPHORE:
+                    try:
+                        try:
+                            for chunk in call_llm_stream(
+                                prompt=user_prompt,
+                                system_instruction=system_instruction,
+                                chat_history=payload.chat_history,
+                                timeout=30
+                            ):
+                                yield f"data: {json.dumps({'token': chunk, 'text': chunk})}\n\n"
+                        except Exception as ai_e:
+                            print(f"[WARNING] Remote AI stream failed: {ai_e}. Using synthesized fallback.")
+                            fallback_reply = f"Based on your {kind_label}, here is the information regarding **{payload.question}**:\n\n"
+                            if matches:
+                                fallback_reply += f"> {matches[0][0][:400]}...\n\n"
+                                fallback_reply += "I've extracted this from your study resource. Would you like a deeper breakdown of any specific concept?"
+                            elif context and "No specific content" not in context:
+                                fallback_reply += f"{context[:600]}\n\nFeel free to ask follow-up questions to explore further!"
+                            else:
+                                fallback_reply += f"I analyzed your study materials for '{payload.question}'. Upload additional notes or select active sources to see page-specific citations!"
+
+                            words = fallback_reply.split(" ")
+                            for idx, w in enumerate(words):
+                                token = w + (" " if idx < len(words) - 1 else "")
+                                yield f"data: {json.dumps({'token': token, 'text': token})}\n\n"
+                                await asyncio.sleep(0.015)
+
+                        yield "data: [DONE]\n\n"
+                    except Exception as stream_err:
+                        yield f"data: {json.dumps({'error': str(stream_err)})}\n\n"
+                        yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                generate_chat_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                }
             )
-        except Exception as ai_e:
-            print(f"[WARNING] Remote AI chat failed: {ai_e}. Using synthesized fallback.")
-            reply = f"Based on your {kind_label}, here is the information regarding **{payload.question}**:\n\n"
-            if matches:
-                reply += f"> {matches[0][0][:400]}...\n\n"
-                reply += "I've extracted this from your study resource. Would you like a deeper breakdown of any specific concept?"
-            elif context and "No specific content" not in context:
-                reply += f"{context[:600]}\n\nFeel free to ask follow-up questions to explore further!"
-            else:
-                reply += f"I analyzed your study materials for '{payload.question}'. Upload additional notes or select active sources to see page-specific citations!"
+
+        async with AI_CONCURRENCY_SEMAPHORE:
+            try:
+                reply = call_llm(
+                    prompt=user_prompt,
+                    system_instruction=system_instruction,
+                    chat_history=payload.chat_history,
+                    timeout=30
+                )
+            except Exception as ai_e:
+                print(f"[WARNING] Remote AI chat failed: {ai_e}. Using synthesized fallback.")
+                reply = f"Based on your {kind_label}, here is the information regarding **{payload.question}**:\n\n"
+                if matches:
+                    reply += f"> {matches[0][0][:400]}...\n\n"
+                    reply += "I've extracted this from your study resource. Would you like a deeper breakdown of any specific concept?"
+                elif context and "No specific content" not in context:
+                    reply += f"{context[:600]}\n\nFeel free to ask follow-up questions to explore further!"
+                else:
+                    reply += f"I analyzed your study materials for '{payload.question}'. Upload additional notes or select active sources to see page-specific citations!"
 
         return {"answer": reply}
 
@@ -972,6 +1327,11 @@ Question: {payload.question}"""
     finally:
         if conn:
             conn.close()
+
+@app.post("/chat/stream")
+async def chat_stream(payload: ChatPayload):
+    payload.stream = True
+    return await chat(payload)
 
 # -------------------------------------------------------------
 # NOTEBOOK LM FEATURES: PODCAST, BRIEFING, TTS
