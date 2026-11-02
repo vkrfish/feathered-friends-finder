@@ -13,7 +13,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
-const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8000";
+const FASTAPI_URL = process.env.FASTAPI_URL || (process.env.RENDER === "true" || process.env.NODE_ENV === "production" ? "https://backend-fastapi-kxy2.onrender.com" : "http://localhost:8000");
 
 app.use(cors());
 app.use(express.json());

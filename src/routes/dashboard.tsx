@@ -4,10 +4,10 @@ import { supabase } from "../integrations/supabase/client";
 
 const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 const API_BASE_URL = (
-  (isLocal ? (import.meta.env.VITE_LOCAL_API_GATEWAY_URL || "http://localhost:3001") : (import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:3001"))
+  (isLocal ? (import.meta.env.VITE_LOCAL_API_GATEWAY_URL || "http://localhost:3001") : (import.meta.env.VITE_API_GATEWAY_URL || "https://backend-node-gateway.onrender.com"))
 ).replace(/\/+$/, "");
 const FASTAPI_BASE_URL = (
-  (isLocal ? (import.meta.env.VITE_LOCAL_FASTAPI_URL || "http://localhost:8000") : (import.meta.env.VITE_FASTAPI_URL || "http://localhost:8000"))
+  (isLocal ? (import.meta.env.VITE_LOCAL_FASTAPI_URL || "http://localhost:8000") : (import.meta.env.VITE_FASTAPI_URL || "https://backend-fastapi-kxy2.onrender.com"))
 ).replace(/\/+$/, "");
 
 // Authenticated fetch helper

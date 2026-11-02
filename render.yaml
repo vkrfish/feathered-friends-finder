@@ -3,7 +3,7 @@ services:
   # 1. AI RAG & Vector Compute Engine (Python FastAPI)
   # ============================================================
   - type: web
-    name: learnx-fastapi
+    name: backend-fastapi
     runtime: python
     rootDir: backend-fastapi
     buildCommand: pip install -r requirements.txt
@@ -22,7 +22,7 @@ services:
   # 2. API Gateway & Multi-Tenant Orchestrator (Node.js)
   # ============================================================
   - type: web
-    name: learnx-node-gateway
+    name: backend-node-gateway
     runtime: node
     rootDir: backend-node
     buildCommand: npm install
@@ -37,7 +37,4 @@ services:
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: FASTAPI_URL
-        fromService:
-          type: web
-          name: learnx-fastapi
-          property: host
+        value: https://backend-fastapi-kxy2.onrender.com
