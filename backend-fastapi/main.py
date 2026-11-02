@@ -52,6 +52,12 @@ def health():
 
 # Database Configuration
 DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ultralearn")
+if "db.peafnjhrzfetfwlksysq.supabase.co" in DB_URL:
+    DB_URL = (
+        DB_URL.replace("db.peafnjhrzfetfwlksysq.supabase.co:5432", "aws-1-ap-northeast-2.pooler.supabase.com:6543")
+        .replace("db.peafnjhrzfetfwlksysq.supabase.co", "aws-1-ap-northeast-2.pooler.supabase.com")
+        .replace("postgres:", "postgres.peafnjhrzfetfwlksysq:")
+    )
 
 def validate_uuid_string(uuid_str: str):
     """
@@ -189,7 +195,7 @@ def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = Fals
     """
     # 1. Try Gemini REST API
     if GEMINI_API_KEY:
-        gemini_models = ["gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]
+        gemini_models = ["gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-2.0-flash", "gemini-flash-latest"]
         for model_name in gemini_models:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
@@ -268,7 +274,7 @@ def call_llm_stream(prompt: str, system_instruction: str = None, chat_history: l
     """
     # 1. Try Google Gemini REST Streaming
     if GEMINI_API_KEY:
-        gemini_models = ["gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]
+        gemini_models = ["gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-2.0-flash", "gemini-flash-latest"]
         for model_name in gemini_models:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?key={GEMINI_API_KEY}&alt=sse"

@@ -68,8 +68,19 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Setup PostgreSQL client pool
 const { Pool } = pg;
-const connectionString =
+let connectionString =
   process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/ultralearn";
+
+// Fix for Render / IPv6-unfriendly environments:
+// Direct Supabase host db.<ref>.supabase.co is IPv6 only and fails with ENETUNREACH on Render.
+// Automatically rewrite direct host to IPv4 connection pooler.
+if (connectionString.includes("db.peafnjhrzfetfwlksysq.supabase.co")) {
+  connectionString = connectionString
+    .replace("db.peafnjhrzfetfwlksysq.supabase.co:5432", "aws-1-ap-northeast-2.pooler.supabase.com:6543")
+    .replace("db.peafnjhrzfetfwlksysq.supabase.co", "aws-1-ap-northeast-2.pooler.supabase.com")
+    .replace("postgres:", "postgres.peafnjhrzfetfwlksysq:");
+}
+
 const pool = new Pool({
   connectionString,
   ssl: connectionString.includes("supabase.com") || process.env.NODE_ENV === "production"
