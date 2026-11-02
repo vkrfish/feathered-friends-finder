@@ -4146,16 +4146,26 @@ function StudySessionPanel({
                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
                     Executive Briefing Doc
                   </span>
-                  {!notebook.briefingDoc && (
-                    <button
-                      onClick={generateBriefing}
-                      disabled={isGeneratingBriefing}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      <span>{isGeneratingBriefing ? "Compiling..." : "Compile Briefing"}</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={generateBriefing}
+                    disabled={isGeneratingBriefing}
+                    className="flex items-center gap-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-2.5 py-1 text-xs font-medium rounded-md transition-colors disabled:opacity-50"
+                  >
+                    {isGeneratingBriefing ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : notebook.briefingDoc ? (
+                      <RefreshCw className="h-3 w-3" />
+                    ) : (
+                      <Sparkles className="h-3 w-3" />
+                    )}
+                    <span>
+                      {isGeneratingBriefing
+                        ? "Compiling..."
+                        : notebook.briefingDoc
+                          ? "Regenerate Briefing"
+                          : "Compile Briefing"}
+                    </span>
+                  </button>
                 </div>
 
                 <div className="pb-6">
