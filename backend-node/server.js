@@ -7,6 +7,11 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
+
+if (typeof globalThis.WebSocket === "undefined") {
+  globalThis.WebSocket = WebSocket;
+}
 
 dotenv.config({ path: "../.env" });
 dotenv.config();
@@ -34,7 +39,15 @@ const supabaseKey =
 
 let supabase = null;
 if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey);
+  supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    realtime: {
+      transport: WebSocket,
+    },
+  });
 } else {
   console.warn(
     "⚠️ [WARNING] Missing Supabase environment keys. User authentication will be disabled.",
