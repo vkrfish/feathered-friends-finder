@@ -2,8 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../integrations/supabase/client";
 
-const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:3001";
-const FASTAPI_BASE_URL = import.meta.env.VITE_FASTAPI_URL || "http://localhost:8000";
+const API_BASE_URL = (import.meta.env.VITE_API_GATEWAY_URL || "http://localhost:3001").replace(/\/+$/, "");
+const FASTAPI_BASE_URL = (import.meta.env.VITE_FASTAPI_URL || "http://localhost:8000").replace(/\/+$/, "");
 
 // Authenticated fetch helper
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
