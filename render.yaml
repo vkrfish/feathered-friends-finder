@@ -5,6 +5,8 @@ services:
   - type: web
     name: backend-fastapi
     runtime: python
+    region: ohio
+    plan: free
     rootDir: backend-fastapi
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -24,6 +26,8 @@ services:
   - type: web
     name: backend-node-gateway
     runtime: node
+    region: ohio
+    plan: free
     rootDir: backend-node
     buildCommand: npm install
     startCommand: node server.js
