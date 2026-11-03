@@ -248,8 +248,7 @@ export default function DashboardPage() {
 
         if (isChangeMode) toast.success("Connected to PostgreSQL Gateway Backend!");
       } catch (err) {
-        setBackendOffline(true);
-        toast.error("PostgreSQL Gateway offline. Falling back to simulated mode.");
+        console.warn("PostgreSQL Gateway temporarily unreachable or waking up:", err);
         loadLocalItems();
       }
     } else {
@@ -988,7 +987,7 @@ export default function DashboardPage() {
             );
           }}
           onDeleteSource={onDeleteSource}
-          useRealBackend={useRealBackend && !backendOffline}
+          useRealBackend={useRealBackend}
           pdfBlobUrl={(id) => blobUrlsRef.current.get(id)}
           onBack={() => {
             setActiveNotebookId(null);

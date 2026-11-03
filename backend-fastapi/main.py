@@ -48,7 +48,30 @@ def health_check():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    db_status = "unknown"
+    db_err = None
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.close()
+            conn.close()
+            db_status = "connected"
+        else:
+            db_status = "failed"
+            db_err = "get_db_connection returned None"
+    except Exception as e:
+        db_status = "failed"
+        db_err = str(e)
+
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "db": db_status,
+        "db_error": db_err,
+        "has_db_url": bool(os.getenv("DATABASE_URL")),
+        "has_gemini_key": bool(GEMINI_API_KEY),
+    }
 
 # Database Configuration
 DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ultralearn")

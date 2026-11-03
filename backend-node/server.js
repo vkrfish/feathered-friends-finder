@@ -32,10 +32,6 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", service: "Ultra Learn Node.js API Gateway" });
 });
 
-app.get("/health", (req, res) => {
-  res.json({ status: "healthy" });
-});
-
 // Setup Supabase client for backend JWT authentication
 const supabaseUrl = process.env.SUPABASE_URL || "https://peafnjhrzfetfwlksysq.supabase.co";
 const supabaseKey =
@@ -105,6 +101,27 @@ const pool = new Pool({
 // Handle idle pool errors without crashing the process
 pool.on("error", (err, client) => {
   console.error("⚠️ Idle PostgreSQL client error:", err.message);
+});
+
+// Comprehensive Health check for Cloud Monitoring
+app.get("/health", async (req, res) => {
+  try {
+    const dbTest = await pool.query("SELECT 1 as connected");
+    res.json({
+      status: "healthy",
+      db: "connected",
+      hasEnvDb: !!process.env.DATABASE_URL,
+      fastapi: FASTAPI_URL,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "degraded",
+      db: "failed",
+      error: err.message,
+      hasEnvDb: !!process.env.DATABASE_URL,
+      fastapi: FASTAPI_URL,
+    });
+  }
 });
 
 // UUID Validator for safe PostgreSQL queries
