@@ -355,10 +355,15 @@ export default function DashboardPage() {
     localStorage.setItem("ultra_learn_items", JSON.stringify(updated));
     // refresh current states
     const nbs = updated.filter((it) => it.kind === "notebook");
-    setNotebooks(nbs);
+    if (nbs.length > 0) {
+      setNotebooks(nbs);
+    }
     if (activeNotebookId) {
       setSources(updated.filter((it) => it.notebookId === activeNotebookId));
-      setActiveNotebook(updated.find((it) => it.id === activeNotebookId) || null);
+      const found = updated.find((it) => it.id === activeNotebookId);
+      if (found) {
+        setActiveNotebook(found);
+      }
     }
   };
 

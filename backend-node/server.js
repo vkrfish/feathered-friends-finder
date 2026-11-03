@@ -19,8 +19,12 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 let rawFastApi = process.env.FASTAPI_URL || (process.env.RENDER === "true" || process.env.NODE_ENV === "production" ? "https://backend-fastapi-cg88.onrender.com" : "http://localhost:8000");
-if (rawFastApi && !rawFastApi.startsWith("http://") && !rawFastApi.startsWith("https://")) {
-  rawFastApi = `https://${rawFastApi}`;
+if (rawFastApi) {
+  if (!rawFastApi.includes(".") && !rawFastApi.includes("localhost")) {
+    rawFastApi = `https://${rawFastApi}.onrender.com`;
+  } else if (!rawFastApi.startsWith("http://") && !rawFastApi.startsWith("https://")) {
+    rawFastApi = `https://${rawFastApi}`;
+  }
 }
 const FASTAPI_URL = rawFastApi.replace(/\/+$/, "");
 
