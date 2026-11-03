@@ -7,7 +7,7 @@ const API_BASE_URL = (
   (isLocal ? (import.meta.env.VITE_LOCAL_API_GATEWAY_URL || "http://localhost:3001") : (import.meta.env.VITE_API_GATEWAY_URL || "https://backend-node-gateway.onrender.com"))
 ).replace(/\/+$/, "");
 const FASTAPI_BASE_URL = (
-  (isLocal ? (import.meta.env.VITE_LOCAL_FASTAPI_URL || "http://localhost:8000") : (import.meta.env.VITE_FASTAPI_URL || "https://backend-fastapi-kxy2.onrender.com"))
+  (isLocal ? (import.meta.env.VITE_LOCAL_FASTAPI_URL || "http://localhost:8000") : (import.meta.env.VITE_FASTAPI_URL || "https://backend-fastapi-cg88.onrender.com"))
 ).replace(/\/+$/, "");
 
 // Authenticated fetch helper
