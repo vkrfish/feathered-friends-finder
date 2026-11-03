@@ -37,4 +37,7 @@ services:
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: FASTAPI_URL
-        value: https://backend-fastapi-kxy2.onrender.com
+        fromService:
+          type: web
+          name: backend-fastapi
+          property: host
