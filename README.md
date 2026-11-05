@@ -1,6 +1,6 @@
-# Ultra Learn (LearnX) — System Architecture & Enterprise Scaling Specification
+#  LearnX — System Architecture & Enterprise Scaling Specification
 
-> **Ultra Learn** is an AI-powered personalized study assistant that unifies multi-source synthesis (NotebookLM-style) with active recall (flashcards, auto-generated quizzes, Socratic chat, and multi-speaker audio podcasts).
+> **Ultra Learn*UI[\"🖥️ React 19 Frontend (Vite + TanStack Router)\u003Cbr/>Tailwind CSS v4 • Radix UI • Port 5173\u003Cbr/>Session Auth Guard • Auto-refreshing JWT\"]:::client* is an AI-powered personalized study assistant that unifies multi-source synthesis (NotebookLM-style) with active recall (flashcards, auto-generated quizzes, Socratic chat, and multi-speaker audio podcasts).
 
 ---
 
