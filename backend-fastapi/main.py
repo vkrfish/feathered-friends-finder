@@ -515,7 +515,7 @@ def chunk_text(text: str, chunk_size: int = 800, overlap: int = 150) -> list:
 # -------------------------------------------------------------
 # HELPER: Insert Chunks & Embeddings into PostgreSQL
 # -------------------------------------------------------------
-def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: str = "", file_name: str = "", content: str = "", kind: str = "document"):
+def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: str = "", file_name: str = "", content: str = "", kind: str = "document", profile_id: Optional[str] = None):
     """
     Stores vector embeddings into public.document_chunks.
     Ensures parent study_items row exists so foreign key constraint is satisfied.
@@ -546,9 +546,11 @@ def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: s
                 (content or "", clean_title, file_name or clean_title, item_id)
             )
         else:
-            cur.execute("SELECT id FROM auth.users LIMIT 1")
-            user_row = cur.fetchone()
-            fallback_user_id = user_row[0] if user_row else None
+            fallback_user_id = profile_id
+            if not fallback_user_id:
+                cur.execute("SELECT id FROM auth.users LIMIT 1")
+                user_row = cur.fetchone()
+                fallback_user_id = user_row[0] if user_row else None
             if fallback_user_id:
                 cur.execute(
                     """
@@ -682,7 +684,7 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
 # API ENDPOINT: PROCESS PDF / DOCX / TXT & STORE RAG CHUNKS
 # -------------------------------------------------------------
 @app.post("/process-pdf")
-async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
+async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), profile_id: Optional[str] = Form(None)):
     validate_uuid_string(item_id)
     conn = get_db_connection()
     try:
@@ -760,7 +762,8 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...)):
                 title=clean_title,
                 file_name=file.filename,
                 content=effective_content,
-                kind="pdf"
+                kind="pdf",
+                profile_id=profile_id
             )
 
         # 4. Generate flashcards and quizzes

@@ -590,6 +590,30 @@ app.get("/api/items", authenticateUser, async (req, res) => {
       items.unshift(formatItem(newNbRes.rows[0]));
     }
 
+    // Attach flashcards and quizzes so that Cards & Quiz views work immediately
+    const validUuids = items.map((it) => it.id).filter(isUuid);
+    if (validUuids.length > 0) {
+      const [cardsRes, quizRes] = await Promise.all([
+        pool.query("SELECT item_id, question, answer, hint FROM public.flashcards WHERE item_id = ANY($1::uuid[])", [validUuids]),
+        pool.query("SELECT item_id, question, options, answer, explanation FROM public.quizzes WHERE item_id = ANY($1::uuid[])", [validUuids]),
+      ]);
+      const cardsByItem = {};
+      const quizByItem = {};
+      for (const c of cardsRes.rows) {
+        if (!cardsByItem[c.item_id]) cardsByItem[c.item_id] = [];
+        cardsByItem[c.item_id].push({ question: c.question, answer: c.answer, hint: c.hint });
+      }
+      for (const q of quizRes.rows) {
+        if (!quizByItem[q.item_id]) quizByItem[q.item_id] = [];
+        quizByItem[q.item_id].push({ question: q.question, options: q.options, answer: q.answer, explanation: q.explanation });
+      }
+      items = items.map((it) => ({
+        ...it,
+        flashcards: cardsByItem[it.id] || [],
+        quiz: quizByItem[it.id] || [],
+      }));
+    }
+
     res.json(items);
   } catch (e) {
     console.error(e);
@@ -727,10 +751,13 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
     const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
     formData.append("file", blob, req.file.originalname);
     formData.append("item_id", itemId);
+    if (req.user && req.user.id) {
+      formData.append("profile_id", req.user.id);
+    }
 
     console.log(`📤 Forwarding PDF ${req.file.originalname} to FastAPI...`);
     const fastApiRes = await axios.post(`${FASTAPI_URL}/process-pdf`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 90000,
     });
 
     const { content, flashcards, quiz } = fastApiRes.data;
@@ -1234,6 +1261,24 @@ app.delete(
   },
 );
 
+const resolveTargetSourceIds = async (notebookOrItemId, selectedSourceIds, userId) => {
+  let targetIds = Array.isArray(selectedSourceIds) && selectedSourceIds.length > 0
+    ? selectedSourceIds.filter(isUuid)
+    : [];
+  if (targetIds.length === 0) {
+    const childSources = await pool.query(
+      "SELECT id FROM public.study_items WHERE notebook_id = $1 AND profile_id = $2",
+      [notebookOrItemId, userId],
+    );
+    if (childSources.rows.length > 0) {
+      targetIds = childSources.rows.map((r) => r.id);
+    } else {
+      targetIds = [notebookOrItemId];
+    }
+  }
+  return targetIds.join(",");
+};
+
 // 12. PODCAST
 app.post("/api/items/:id/podcast", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
@@ -1250,9 +1295,7 @@ app.post("/api/items/:id/podcast", authenticateUser, verifyItemOwnership, async 
   if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
 
   try {
-    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
-      ? selectedSourceIds.join(",")
-      : id;
+    const ragItemId = await resolveTargetSourceIds(id, selectedSourceIds, req.user.id);
 
     console.log(`🎙️ Generating AI podcast for items [${ragItemId}]...`);
     const fastApiRes = await axios.post(`${FASTAPI_URL}/generate-podcast`, {
@@ -1283,9 +1326,7 @@ app.post("/api/items/:id/briefing", authenticateUser, verifyItemOwnership, async
   const { selectedSourceIds } = req.body || {};
   if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
   try {
-    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
-      ? selectedSourceIds.join(",")
-      : id;
+    const ragItemId = await resolveTargetSourceIds(id, selectedSourceIds, req.user.id);
 
     console.log(`📄 Generating Briefing Doc for items [${ragItemId}]...`);
     const fastApiRes = await axios.post(`${FASTAPI_URL}/generate-briefing`, { item_id: ragItemId });
@@ -1308,9 +1349,7 @@ app.post("/api/items/:id/quiz/generate", authenticateUser, verifyItemOwnership, 
   if (!isUuid(id)) return res.status(404).json({ error: "Item not found" });
 
   try {
-    const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)
-      ? selectedSourceIds.join(",")
-      : id;
+    const ragItemId = await resolveTargetSourceIds(id, selectedSourceIds, req.user.id);
 
     console.log(`🎯 Generating RAG Quiz for items [${ragItemId}] | Topic: "${topic || "General"}" | Difficulty: ${difficulty || "medium"}...`);
     const fastApiRes = await axios.post(`${FASTAPI_URL}/generate-quiz`, {

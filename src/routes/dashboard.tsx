@@ -1939,7 +1939,8 @@ function StudySessionPanel({
 
   // Generate briefing doc
   const generateBriefing = async () => {
-    if (selectedSourceIds.length === 0) return toast.warning("Check at least one active source.");
+    const targetSourceIds = selectedSourceIds.length > 0 ? selectedSourceIds : sources.map((s) => s.id);
+    if (targetSourceIds.length === 0) return toast.warning("Add or check at least one source material.");
     setIsGeneratingBriefing(true);
     toast.info("Generating Briefing Doc summarizing selected sources...");
     try {
@@ -1947,14 +1948,14 @@ function StudySessionPanel({
         const res = await fetchWithAuth(`${API_BASE_URL}/api/items/${notebook.id}/briefing`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ selectedSourceIds }),
+          body: JSON.stringify({ selectedSourceIds: targetSourceIds }),
         });
         const data = await res.json();
         onUpdateNotebook({ ...notebook, briefingDoc: data.briefing_doc });
         toast.success("Briefing Doc compiled!");
       } else {
         setTimeout(() => {
-          const activeItems = sources.filter((s) => selectedSourceIds.includes(s.id));
+          const activeItems = sources.filter((s) => targetSourceIds.includes(s.id));
           const sourceTitles = activeItems.map(s => `* **${s.title}** (${s.kind.toUpperCase()})`).join("\n");
           const glossaryItems = activeItems.map(s => {
             if (s.kind === "youtube") {
@@ -1979,7 +1980,8 @@ function StudySessionPanel({
 
   // Generate audio overview podcast
   const generatePodcast = async () => {
-    if (selectedSourceIds.length === 0) return toast.warning("Check at least one active source.");
+    const targetSourceIds = selectedSourceIds.length > 0 ? selectedSourceIds : sources.map((s) => s.id);
+    if (targetSourceIds.length === 0) return toast.warning("Add or check at least one source material.");
     setIsGeneratingPodcast(true);
     toast.info("Synthesizing AI Podcast Overview. Grab a coffee, this takes 15-30s...");
     try {
@@ -1998,7 +2000,7 @@ function StudySessionPanel({
             pages: podcastPages,
             host1Name: h1Name,
             host2Name: h2Name,
-            selectedSourceIds,
+            selectedSourceIds: targetSourceIds,
           }),
         });
         const data = await res.json();
